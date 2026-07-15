@@ -55,7 +55,7 @@ export function AppShell({
             <div className="min-w-0">
               <p className="text-xs font-medium truncate">ABC</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-tight">
-                System Admin
+                System Admin ABCXYZ
               </p>
             </div>
           </div>
