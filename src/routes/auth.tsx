@@ -1,5 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { apiErrorMessage } from "@/lib/api";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -13,6 +15,28 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const [mode, setMode] = useState<"signin" | "register">("signin");
+  const [email, setEmail] = useState("admin@firm.com");
+  const [password, setPassword] = useState("admin123");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const { login, register } = useAuth();
+  const navigate = useNavigate();
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      if (mode === "signin") await login(email, password);
+      else await register(name, email, password);
+      navigate({ to: "/" });
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -28,9 +52,14 @@ function AuthPage() {
             <h1 className="text-3xl font-semibold leading-tight text-balance mb-6">
               Secure infrastructure for institutional documents
             </h1>
-            <p className="text-muted-foreground text-pretty max-w-[48ch]">
+            <p className="text-muted-foreground text-pretty max-w-[48ch] mb-6">
               Maintain complete chain of custody for sensitive files with granular permission sets and auditable access logs.
             </p>
+            <div className="text-xs text-muted-foreground space-y-1 p-4 rounded-lg ring-1 ring-border bg-secondary/40">
+              <p className="font-semibold text-foreground">Prototype accounts</p>
+              <p>Admin — <code>admin@firm.com</code> / <code>admin123</code></p>
+              <p>User — <code>sarah@firm.com</code> / <code>sarah123</code></p>
+            </div>
           </div>
 
           <div className="bg-secondary ring-1 ring-border rounded-2xl p-8">
@@ -53,12 +82,15 @@ function AuthPage() {
               </button>
             </div>
 
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={onSubmit}>
               {mode === "register" && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Full name</label>
                   <input
                     type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
                     className="w-full h-10 px-3 rounded-lg ring-1 ring-border bg-background text-sm focus:outline-none focus:ring-ring"
                     placeholder="Jane Doe"
                   />
@@ -68,30 +100,31 @@ function AuthPage() {
                 <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Email address</label>
                 <input
                   type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                   className="w-full h-10 px-3 rounded-lg ring-1 ring-border bg-background text-sm focus:outline-none focus:ring-ring"
                   placeholder="name@firm.com"
                 />
               </div>
               <div className="space-y-1">
-                <div className="flex justify-between">
-                  <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Password</label>
-                  {mode === "signin" && (
-                    <a href="#" className="text-xs text-primary hover:underline">
-                      Reset?
-                    </a>
-                  )}
-                </div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Password</label>
                 <input
                   type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
                   className="w-full h-10 px-3 rounded-lg ring-1 ring-border bg-background text-sm focus:outline-none focus:ring-ring"
                   placeholder="••••••••"
                 />
               </div>
+              {error && <p className="text-xs text-destructive">{error}</p>}
               <button
                 type="submit"
-                className="w-full bg-primary text-primary-foreground text-sm font-medium py-2.5 rounded-lg hover:brightness-105 transition"
+                disabled={submitting}
+                className="w-full bg-primary text-primary-foreground text-sm font-medium py-2.5 rounded-lg hover:brightness-105 transition disabled:opacity-60"
               >
-                {mode === "signin" ? "Access documents" : "Create account"}
+                {submitting ? "…" : mode === "signin" ? "Access documents" : "Create account"}
               </button>
             </form>
           </div>

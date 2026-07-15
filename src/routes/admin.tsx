@@ -1,20 +1,51 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { MoreHorizontal } from "lucide-react";
+import { usersApi, apiErrorMessage } from "@/lib/api";
+import type { Role } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPanel,
 });
 
-const users = [
-  { name: "Marcus Thorne", email: "m.thorne@firm.com", role: "Global Admin" },
-  { name: "Sarah Jenkins", email: "sarah@firm.com", role: "Department Manager" },
-  { name: "Elena Rodriguez", email: "e.rod@firm.com", role: "Department Manager" },
-  { name: "David Chen", email: "d.chen@firm.com", role: "Standard User" },
-  { name: "Priya Nair", email: "p.nair@firm.com", role: "Standard User" },
-];
-
 function AdminPanel() {
+  const { isAdmin, loading } = useAuth();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!loading && !isAdmin) navigate({ to: "/" });
+  }, [loading, isAdmin, navigate]);
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => usersApi.list(),
+    enabled: isAdmin,
+  });
+
+  const updateRole = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: Role }) => usersApi.updateRole(id, role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onError: (err) => alert(apiErrorMessage(err)),
+  });
+
+  async function exportLogs() {
+    try {
+      const blob = await usersApi.exportAuditLogs();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "audit-log.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(apiErrorMessage(err));
+    }
+  }
+
   return (
     <AppShell searchPlaceholder="Search users...">
       <section className="py-12 px-8">
@@ -26,7 +57,10 @@ function AdminPanel() {
                 Manage institutional roles and access levels.
               </p>
             </div>
-            <button className="bg-background text-foreground text-xs font-medium py-1.5 px-3 rounded-lg ring-1 ring-border hover:bg-secondary transition">
+            <button
+              onClick={exportLogs}
+              className="bg-background text-foreground text-xs font-medium py-1.5 px-3 rounded-lg ring-1 ring-border hover:bg-secondary transition"
+            >
               Export logs
             </button>
           </div>
@@ -34,7 +68,7 @@ function AdminPanel() {
           <div className="space-y-2">
             {users.map((u) => (
               <div
-                key={u.email}
+                key={u.user_id}
                 className="flex items-center justify-between p-4 bg-background ring-1 ring-border rounded-xl hover:bg-secondary/40 transition-colors"
               >
                 <div className="flex items-center gap-4">
@@ -48,12 +82,12 @@ function AdminPanel() {
                   <div className="text-right">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground mb-0.5">Role</p>
                     <select
-                      defaultValue={u.role}
+                      value={u.role}
+                      onChange={(e) => updateRole.mutate({ id: u.user_id, role: e.target.value as Role })}
                       className="text-xs font-medium bg-transparent border-none focus:ring-0 cursor-pointer"
                     >
-                      <option>Global Admin</option>
-                      <option>Department Manager</option>
-                      <option>Standard User</option>
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="USER">USER</option>
                     </select>
                   </div>
                   <button className="size-8 bg-secondary rounded-lg text-muted-foreground grid place-items-center hover:text-foreground transition">
