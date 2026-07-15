@@ -56,3 +56,12 @@ export function apiErrorMessage(err: unknown, fallback = "Something went wrong")
   if (err instanceof Error) return err.message;
   return fallback;
 }
+
+// Install mock adapter in the browser when VITE_USE_MOCK is enabled (default).
+// Later, set VITE_USE_MOCK=false in .env.local to point Axios at the real backend.
+const useMock =
+  (import.meta.env.VITE_USE_MOCK as string | undefined) !== "false";
+if (typeof window !== "undefined" && useMock) {
+  void import("@/lib/mock/install").then(({ installMockApi }) => installMockApi());
+}
+
