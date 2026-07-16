@@ -3,7 +3,11 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
-/* asdas */
+<<<<<<< HEAD
+/* asdas */ //a
+=======
+/* aaa */
+>>>>>>> main
 /*
  * Design system definition.
  *
