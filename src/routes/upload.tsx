@@ -42,7 +42,7 @@ function UploadPage() {
   }
 
   return (
-    <AppShell>
+    <AppShell showHeader={false}>
       <section className="py-12 px-8">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
@@ -71,7 +71,7 @@ function UploadPage() {
             <div className="size-12 bg-secondary rounded-2xl mx-auto mb-4 grid place-items-center">
               <UploadCloud className="size-5 text-muted-foreground" strokeWidth={1.75} />
             </div>
-            <h3 className="text-lg font-medium mb-2">Drop archives here to ingest</h3>
+            <h3 className="text-lg font-medium mb-2">Drop files here to ingest</h3>
             <p className="text-sm text-muted-foreground max-w-[40ch] mx-auto text-pretty">
               Support for PDF, Excel, Word, and system images up to 50MB per file.
             </p>

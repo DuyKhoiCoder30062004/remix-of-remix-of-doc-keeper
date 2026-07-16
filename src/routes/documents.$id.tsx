@@ -13,6 +13,7 @@ function DocumentDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user, isAdmin } = useAuth();
 
   const { data: doc } = useQuery({
     queryKey: ["document", id],
@@ -82,6 +83,8 @@ function DocumentDetail() {
   }
 
   const ext = (doc.metadata.extension ?? "DOC").toUpperCase();
+  const canModifyDocument = !isAdmin;
+  const canDeleteDocument = !!user && (isAdmin || doc.owner_id === user.user_id);
   const sizeLabel =
     doc.metadata.size_bytes && doc.metadata.size_bytes > 1_000_000
       ? `${(doc.metadata.size_bytes / 1_000_000).toFixed(1)} MB`
@@ -104,23 +107,29 @@ function DocumentDetail() {
               </div>
               <div className="flex gap-2">
                 <IconBtn icon={Download} label="Download" onClick={download} />
-                <IconBtn
-                  icon={Pencil}
-                  label="Rename"
-                  onClick={() => {
-                    const next = prompt("New title", doc.title);
-                    if (next && next !== doc.title) rename.mutate(next);
-                  }}
-                />
-                <IconBtn icon={FolderInput} label="Move" onClick={() => alert("Move dialog stub")} />
-                <IconBtn
-                  icon={Trash2}
-                  label="Delete"
-                  destructive
-                  onClick={() => {
-                    if (confirm(`Delete ${doc.title}?`)) remove.mutate();
-                  }}
-                />
+                {canModifyDocument && (
+                  <>
+                    <IconBtn
+                      icon={Pencil}
+                      label="Rename"
+                      onClick={() => {
+                        const next = prompt("New title", doc.title);
+                        if (next && next !== doc.title) rename.mutate(next);
+                      }}
+                    />
+                    <IconBtn icon={FolderInput} label="Move" onClick={() => alert("Move dialog stub")} />
+                  </>
+                )}
+                {canDeleteDocument && (
+                  <IconBtn
+                    icon={Trash2}
+                    label="Delete"
+                    destructive
+                    onClick={() => {
+                      if (confirm(`Delete ${doc.title}?`)) remove.mutate();
+                    }}
+                  />
+                )}
               </div>
             </div>
 

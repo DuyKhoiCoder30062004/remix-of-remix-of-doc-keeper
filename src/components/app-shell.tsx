@@ -13,16 +13,18 @@ const nav = [
 
 export function AppShell({
   children,
-  searchPlaceholder = "Search archives...",
+  searchPlaceholder = "Search...",
   primaryAction,
   searchValue,
   onSearchChange,
+  showHeader = true,
 }: {
   children: ReactNode;
   searchPlaceholder?: string;
   primaryAction?: { label: string; to: string };
   searchValue?: string;
   onSearchChange?: (v: string) => void;
+  showHeader?: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { user, isAdmin, logout } = useAuth();
@@ -83,27 +85,29 @@ export function AppShell({
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 border-b border-border bg-background/50 flex items-center justify-between px-8 shrink-0">
-          <div className="relative w-96">
-            <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" strokeWidth={1.75} />
-            <input
-              type="text"
-              value={searchValue ?? ""}
-              onChange={(e) => onSearchChange?.(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="w-full h-9 pl-9 pr-3 bg-secondary border-none rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-          {primaryAction && (
-            <Link
-              to={primaryAction.to}
-              className="bg-primary text-primary-foreground text-sm font-medium py-1.5 pl-2 pr-3 flex items-center gap-2 rounded-lg hover:brightness-105 transition"
-            >
-              <Plus className="size-4" strokeWidth={2} />
-              {primaryAction.label}
-            </Link>
-          )}
-        </header>
+        {showHeader && (
+          <header className="h-16 border-b border-border bg-background/50 flex items-center justify-between px-8 shrink-0">
+            <div className="relative w-96">
+              <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" strokeWidth={1.75} />
+              <input
+                type="text"
+                value={searchValue ?? ""}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="w-full h-9 pl-9 pr-3 bg-secondary border-none rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            {primaryAction && (
+              <Link
+                to={primaryAction.to}
+                className="bg-primary text-primary-foreground text-sm font-medium py-1.5 pl-2 pr-3 flex items-center gap-2 rounded-lg hover:brightness-105 transition"
+              >
+                <Plus className="size-4" strokeWidth={2} />
+                {primaryAction.label}
+              </Link>
+            )}
+          </header>
+        )}
         <div className="flex-1 overflow-auto">{children}</div>
       </main>
     </div>

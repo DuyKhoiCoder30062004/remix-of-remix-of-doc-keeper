@@ -19,6 +19,8 @@ export const Route = createFileRoute("/folders")({
 function FoldersPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = user?.role === "ADMIN";
+  const canManageFolders = !isAdmin;
   const qc = useQueryClient();
 
   const [q, setQ] = useState("");
@@ -101,31 +103,34 @@ function FoldersPage() {
           <div>
             <h2 className="text-xl font-semibold">Folder Management</h2>
             <p className="text-sm text-muted-foreground">
-              Organize documents into folders. Move files between folders as needed.
+              {isAdmin
+                ? "Admin can view vault folders, but can only delete items that belong to other users."
+                : "Manage your own folders and documents. Other users remain hidden from your view."}
             </p>
           </div>
         </div>
 
-        {/* New folder */}
-        <div className="flex items-center gap-2 bg-background ring-1 ring-border rounded-xl p-3">
-          <FolderPlus className="size-4 text-muted-foreground ml-2" />
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="New folder name"
-            className="flex-1 bg-transparent text-sm focus:outline-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && newName.trim()) createFolder.mutate(newName.trim());
-            }}
-          />
-          <button
-            onClick={() => newName.trim() && createFolder.mutate(newName.trim())}
-            disabled={!newName.trim() || createFolder.isPending}
-            className="bg-primary text-primary-foreground text-xs font-medium py-1.5 px-3 rounded-lg disabled:opacity-50"
-          >
-            Add folder
-          </button>
-        </div>
+        {!isAdmin && (
+          <div className="flex items-center gap-2 bg-background ring-1 ring-border rounded-xl p-3">
+            <FolderPlus className="size-4 text-muted-foreground ml-2" />
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="New folder name"
+              className="flex-1 bg-transparent text-sm focus:outline-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newName.trim()) createFolder.mutate(newName.trim());
+              }}
+            />
+            <button
+              onClick={() => newName.trim() && createFolder.mutate(newName.trim())}
+              disabled={!newName.trim() || createFolder.isPending}
+              className="bg-primary text-primary-foreground text-xs font-medium py-1.5 px-3 rounded-lg disabled:opacity-50"
+            >
+              Add folder
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Folder list */}
@@ -138,7 +143,7 @@ function FoldersPage() {
                   : "bg-background ring-border hover:bg-secondary/40"
               }`}
             >
-              All documents
+              {isAdmin ? "All documents" : "My documents"}
             </button>
             {filteredFolders.map((f) => (
               <FolderRow
@@ -146,6 +151,7 @@ function FoldersPage() {
                 folder={f}
                 active={selectedFolderId === f.folder_id}
                 onSelect={() => setSelectedFolderId(f.folder_id)}
+                canManage={canManageFolders}
                 onRename={(name) => renameFolder.mutate({ id: f.folder_id, name })}
                 onDelete={() => {
                   if (confirm(`Delete folder "${f.name}"? Documents inside will become unfiled.`)) {
@@ -164,7 +170,7 @@ function FoldersPage() {
             <div className="px-4 py-3 border-b border-border text-xs uppercase tracking-wide text-muted-foreground font-semibold">
               {selectedFolderId
                 ? folders.find((f) => f.folder_id === selectedFolderId)?.name ?? "Folder"
-                : "All documents"}
+                : isAdmin ? "All documents" : "My documents"}
               <span className="ml-2 normal-case text-muted-foreground/70">
                 ({visibleDocs.length})
               </span>
@@ -184,13 +190,15 @@ function FoldersPage() {
                         : "Unfiled"}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setMoveDoc(d)}
-                    className="text-xs font-medium py-1.5 px-2.5 rounded-lg ring-1 ring-border hover:bg-secondary flex items-center gap-1.5"
-                  >
-                    <MoveRight className="size-3.5" />
-                    Move
-                  </button>
+                  {!isAdmin && (
+                    <button
+                      onClick={() => setMoveDoc(d)}
+                      className="text-xs font-medium py-1.5 px-2.5 rounded-lg ring-1 ring-border hover:bg-secondary flex items-center gap-1.5"
+                    >
+                      <MoveRight className="size-3.5" />
+                      Move
+                    </button>
+                  )}
                 </li>
               ))}
               {visibleDocs.length === 0 && (
@@ -220,12 +228,14 @@ function FolderRow({
   folder,
   active,
   onSelect,
+  canManage,
   onRename,
   onDelete,
 }: {
   folder: Folder;
   active: boolean;
   onSelect: () => void;
+  canManage: boolean;
   onRename: (name: string) => void;
   onDelete: () => void;
 }) {
@@ -262,13 +272,15 @@ function FolderRow({
           {folder.name}
         </button>
       )}
-      <button
-        onClick={() => setEditing(true)}
-        className="text-muted-foreground hover:text-foreground"
-        title="Rename"
-      >
-        <Pencil className="size-3.5" />
-      </button>
+      {canManage && (
+        <button
+          onClick={() => setEditing(true)}
+          className="text-muted-foreground hover:text-foreground"
+          title="Rename"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+      )}
       <button
         onClick={onDelete}
         className="text-muted-foreground hover:text-destructive"

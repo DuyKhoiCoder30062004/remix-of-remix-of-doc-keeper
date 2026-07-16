@@ -29,6 +29,7 @@ function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user, loading } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -64,8 +65,23 @@ function Dashboard() {
           <div>
             <h2 className="text-xl font-semibold mb-2">Recent Documents</h2>
             <p className="text-sm text-muted-foreground">
-              {isLoading ? "Loading…" : `${rows.length} file${rows.length === 1 ? "" : "s"} across all shared environments.`}
+              {isLoading ? "Loading…" : `${rows.length} file${rows.length === 1 ? "" : "s"} ${isAdmin ? "visible to you in the vault" : "owned by you in your vault"}.`}
             </p>
+          </div>
+        </div>
+
+        <div className="mb-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Visible documents</p>
+            <p className="mt-2 text-2xl font-semibold">{rows.length}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Access mode</p>
+            <p className="mt-2 text-2xl font-semibold">{isAdmin ? "Admin" : "Personal"}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vault scope</p>
+            <p className="mt-2 text-lg font-semibold">{isAdmin ? "All users" : "Your own files"}</p>
           </div>
         </div>
 
@@ -124,7 +140,7 @@ function Dashboard() {
               {rows.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={6} className="px-6 py-16 text-center text-sm text-muted-foreground">
-                    No documents match "{debounced}".
+                    {debounced ? `No documents match "${debounced}".` : "No recent documents yet."}
                   </td>
                 </tr>
               )}

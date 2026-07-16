@@ -26,6 +26,9 @@ function AdminPanel() {
     enabled: isAdmin,
   });
 
+  const adminCount = users.filter((u) => u.role === "ADMIN").length;
+  const userCount = users.filter((u) => u.role === "USER").length;
+
   const updateRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: Role }) => usersApi.updateRole(id, role),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
@@ -63,6 +66,25 @@ function AdminPanel() {
             >
               Export logs
             </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total accounts</p>
+              <p className="mt-2 text-2xl font-semibold">{users.length}</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Admins</p>
+              <p className="mt-2 text-2xl font-semibold">{adminCount}</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Regular users</p>
+              <p className="mt-2 text-2xl font-semibold">{userCount}</p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+            Admins can delete documents and folders, but they cannot rename or move files that belong to other users.
           </div>
 
           <div className="space-y-2">

@@ -92,25 +92,38 @@ export function installMockApi() {
   });
 
   // ---------- folders ----------
-  mock.onGet("/folders").reply(() => [200, folders]);
+  mock.onGet("/folders").reply((config) => {
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
+    const visible = actor.role === "ADMIN" ? folders : folders.filter((f) => f.owner_id === actor.user_id);
+    return [200, visible];
+  });
   mock.onPost("/folders").reply((config) => {
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
     const { name } = JSON.parse(config.data);
-    const f = { folder_id: uid("f"), name, owner_id: currentUserId(config), created_at: new Date().toISOString() };
+    const f = { folder_id: uid("f"), name, owner_id: actor.user_id, created_at: new Date().toISOString() };
     folders.push(f);
     return [200, f];
   });
   mock.onPatch(/\/folders\/[^/]+$/).reply((config) => {
     const id = config.url!.split("/")[2];
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
     const { name } = JSON.parse(config.data);
     const f = folders.find((x) => x.folder_id === id);
     if (!f) return [404, { message: "Folder not found" }];
+    if (actor.role === "ADMIN") return [403, { message: "Admins can only delete folders." }];
+    if (f.owner_id !== actor.user_id) return [403, { message: "You can only rename your own folders." }];
     f.name = name;
     return [200, f];
   });
   mock.onDelete(/\/folders\/[^/]+$/).reply((config) => {
     const id = config.url!.split("/")[2];
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
+    const f = folders.find((x) => x.folder_id === id);
+    if (!f) return [404, { message: "Folder not found" }];
+    if (actor.role !== "ADMIN" && f.owner_id !== actor.user_id) {
+      return [403, { message: "You can only delete your own folders." }];
+    }
     const idx = folders.findIndex((x) => x.folder_id === id);
-    if (idx < 0) return [404, { message: "Folder not found" }];
     folders.splice(idx, 1);
     return [204];
   });
@@ -119,7 +132,9 @@ export function installMockApi() {
   mock.onGet("/documents").reply((config) => {
     const { folder_id, q } = config.params ?? {};
     const needle = (q as string | undefined)?.toLowerCase();
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
     const list = documents.filter((d) => {
+      if (actor.role !== "ADMIN" && d.owner_id !== actor.user_id) return false;
       if (folder_id !== undefined && folder_id !== null && d.folder_id !== folder_id) return false;
       if (needle && !d.title.toLowerCase().includes(needle)) return false;
       return true;
@@ -129,14 +144,21 @@ export function installMockApi() {
 
   mock.onGet("/documents/search").reply((config) => {
     const needle = ((config.params?.q as string) ?? "").toLowerCase();
-    return [200, documents.filter((d) => d.title.toLowerCase().includes(needle))];
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
+    const visible = documents.filter((d) => actor.role === "ADMIN" || d.owner_id === actor.user_id);
+    return [200, visible.filter((d) => d.title.toLowerCase().includes(needle))];
   });
 
   mock.onGet(/\/documents\/[^/]+$/).reply((config) => {
     const id = config.url!.split("/")[2];
     if (id === "search") return [400];
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
     const d = documents.find((x) => x.doc_id === id);
-    return d ? [200, d] : [404, { message: "Document not found" }];
+    if (!d) return [404, { message: "Document not found" }];
+    if (actor.role !== "ADMIN" && d.owner_id !== actor.user_id) {
+      return [404, { message: "Document not found" }];
+    }
+    return [200, d];
   });
 
   mock.onPost("/documents").reply((config) => {
@@ -175,11 +197,26 @@ export function installMockApi() {
     return [200, doc];
   });
 
+  mock.onPut(/\/documents\/[^/]+$/).reply((config) => {
+    const id = config.url!.split('/')[2];
+    const body = JSON.parse(config.data);
+    const d = documents.find((x) => x.doc_id === id);
+    if (!d) return [404, { message: 'Document not found' }];
+    if (body.title) d.title = body.title;
+    if (body.folder_id !== undefined) d.folder_id = body.folder_id;
+    if (body.metadata) d.metadata = { ...d.metadata, ...body.metadata };
+    d.updated_at = new Date().toISOString();
+    return [200, d];
+  });
+
   mock.onPatch(/\/documents\/[^/]+\/move$/).reply((config) => {
     const id = config.url!.split("/")[2];
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
     const { folder_id } = JSON.parse(config.data);
     const d = documents.find((x) => x.doc_id === id);
     if (!d) return [404, { message: "Document not found" }];
+    if (actor.role === "ADMIN") return [403, { message: "Admins can only delete documents." }];
+    if (d.owner_id !== actor.user_id) return [403, { message: "You can only move your own documents." }];
     d.folder_id = folder_id;
     d.updated_at = new Date().toISOString();
     return [200, d];
@@ -187,9 +224,12 @@ export function installMockApi() {
 
   mock.onPatch(/\/documents\/[^/]+$/).reply((config) => {
     const id = config.url!.split("/")[2];
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
     const { title } = JSON.parse(config.data);
     const d = documents.find((x) => x.doc_id === id);
     if (!d) return [404, { message: "Document not found" }];
+    if (actor.role === "ADMIN") return [403, { message: "Admins can only delete documents." }];
+    if (d.owner_id !== actor.user_id) return [403, { message: "You can only rename your own documents." }];
     d.title = title;
     d.updated_at = new Date().toISOString();
     return [200, d];
@@ -197,8 +237,13 @@ export function installMockApi() {
 
   mock.onDelete(/\/documents\/[^/]+$/).reply((config) => {
     const id = config.url!.split("/")[2];
+    const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
+    const d = documents.find((x) => x.doc_id === id);
+    if (!d) return [404, { message: "Document not found" }];
+    if (actor.role !== "ADMIN" && d.owner_id !== actor.user_id) {
+      return [403, { message: "You can only delete your own documents." }];
+    }
     const idx = documents.findIndex((x) => x.doc_id === id);
-    if (idx < 0) return [404, { message: "Document not found" }];
     documents.splice(idx, 1);
     return [204];
   });
@@ -234,6 +279,15 @@ export function installMockApi() {
     };
     permissions.push(perm);
     return [200, perm];
+  });
+
+  mock.onPut(/\/permissions\/[^/]+$/).reply((config) => {
+    const id = config.url!.split('/')[2];
+    const { access_type } = JSON.parse(config.data);
+    const p = permissions.find((x) => x.perm_id === id);
+    if (!p) return [404, { message: 'Permission not found' }];
+    p.access_type = access_type;
+    return [200, p];
   });
 
   mock.onPatch(/\/permissions\/[^/]+$/).reply((config) => {
@@ -277,6 +331,15 @@ export function installMockApi() {
     };
     sharingRequests.push(req);
     return [200, req];
+  });
+
+  mock.onPut(/\/sharing-requests\/[^/]+$/).reply((config) => {
+    const id = config.url!.split('/')[2];
+    const { status } = JSON.parse(config.data);
+    const r = sharingRequests.find((x) => x.request_id === id);
+    if (!r) return [404, { message: 'Sharing request not found' }];
+    r.status = status;
+    return [200, r];
   });
 
   mock.onPost(/\/sharing-requests\/[^/]+\/approve$/).reply((config) => {
