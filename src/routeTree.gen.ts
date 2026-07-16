@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as FoldersRouteImport } from './routes/folders'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,6 +19,11 @@ import { Route as DocumentsIdRouteImport } from './routes/documents.$id'
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FoldersRoute = FoldersRouteImport.update({
+  id: '/folders',
+  path: '/folders',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/folders': typeof FoldersRoute
   '/upload': typeof UploadRoute
   '/documents/$id': typeof DocumentsIdRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/folders': typeof FoldersRoute
   '/upload': typeof UploadRoute
   '/documents/$id': typeof DocumentsIdRoute
 }
@@ -60,21 +68,36 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/folders': typeof FoldersRoute
   '/upload': typeof UploadRoute
   '/documents/$id': typeof DocumentsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/auth' | '/upload' | '/documents/$id'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/folders'
+    | '/upload'
+    | '/documents/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/auth' | '/upload' | '/documents/$id'
-  id: '__root__' | '/' | '/admin' | '/auth' | '/upload' | '/documents/$id'
+  to: '/' | '/admin' | '/auth' | '/folders' | '/upload' | '/documents/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/folders'
+    | '/upload'
+    | '/documents/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
+  FoldersRoute: typeof FoldersRoute
   UploadRoute: typeof UploadRoute
   DocumentsIdRoute: typeof DocumentsIdRoute
 }
@@ -86,6 +109,13 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/folders': {
+      id: '/folders'
+      path: '/folders'
+      fullPath: '/folders'
+      preLoaderRoute: typeof FoldersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -123,19 +153,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
+  FoldersRoute: FoldersRoute,
   UploadRoute: UploadRoute,
   DocumentsIdRoute: DocumentsIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
