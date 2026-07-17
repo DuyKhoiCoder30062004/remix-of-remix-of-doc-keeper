@@ -4,7 +4,7 @@ import type { AccessType, Permission } from "./types";
 // Endpoints under /api/v1/permissions
 export const permissionsApi = {
   async listForDocument(docId: string): Promise<Permission[]> {
-    const { data } = await api.get<Permission[]>(`/permissions`, { params: { doc_id: docId } });
+    const { data } = await api.get<Permission[]>("/permissions", { params: { doc_id: docId } });
     return data;
   },
 
