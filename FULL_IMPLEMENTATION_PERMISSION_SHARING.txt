@@ -1,0 +1,632 @@
+FULL IMPLEMENTATION - PERMISSION + SHARING (BACKEND)
+
+Use this as reference to replace your current permissionManagement and sharingRequestManagement implementation.
+This implementation is aligned with your current frontend API usage in:
+- src/lib/api/permissions.ts
+- src/lib/api/sharing.ts
+
+================================================================
+1) Permission DTO
+================================================================
+package com.saigontechnologyintern.document_management.permissionManagement;
+
+public class PermissionResponseDto {
+    private Integer perm_id;
+    private Integer doc_id;
+    private Integer user_id;
+    private String user_name;
+    private String user_email;
+    private String access_type;
+
+    public PermissionResponseDto() {}
+
+    public PermissionResponseDto(
+            Integer perm_id,
+            Integer doc_id,
+            Integer user_id,
+            String user_name,
+            String user_email,
+            String access_type) {
+        this.perm_id = perm_id;
+        this.doc_id = doc_id;
+        this.user_id = user_id;
+        this.user_name = user_name;
+        this.user_email = user_email;
+        this.access_type = access_type;
+    }
+
+    public Integer getPerm_id() {
+        return perm_id;
+    }
+
+    public void setPerm_id(Integer perm_id) {
+        this.perm_id = perm_id;
+    }
+
+    public Integer getDoc_id() {
+        return doc_id;
+    }
+
+    public void setDoc_id(Integer doc_id) {
+        this.doc_id = doc_id;
+    }
+
+    public Integer getUser_id() {
+        return user_id;
+    }
+
+    public void setUser_id(Integer user_id) {
+        this.user_id = user_id;
+    }
+
+    public String getUser_name() {
+        return user_name;
+    }
+
+    public void setUser_name(String user_name) {
+        this.user_name = user_name;
+    }
+
+    public String getUser_email() {
+        return user_email;
+    }
+
+    public void setUser_email(String user_email) {
+        this.user_email = user_email;
+    }
+
+    public String getAccess_type() {
+        return access_type;
+    }
+
+    public void setAccess_type(String access_type) {
+        this.access_type = access_type;
+    }
+}
+
+================================================================
+2) Permission Repository
+================================================================
+package com.saigontechnologyintern.document_management.permissionManagement;
+
+import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface PermissionManagerRepository extends JpaRepository<PermissionManager, Integer> {
+    List<PermissionManager> findByDocument_DocId(Integer docId);
+}
+
+================================================================
+3) Permission Service
+================================================================
+package com.saigontechnologyintern.document_management.permissionManagement;
+
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManage;
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManageRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.List;
+import org.springframework.stereotype.Service;
+
+@Service
+public class PermissionManagerService {
+    private final PermissionManagerRepository permissionManagerRepository;
+    private final DocumentManageRepository documentManageRepository;
+    private final UserManagerRepository userManagerRepository;
+
+    public PermissionManagerService(
+            PermissionManagerRepository permissionManagerRepository,
+            DocumentManageRepository documentManageRepository,
+            UserManagerRepository userManagerRepository) {
+        this.permissionManagerRepository = permissionManagerRepository;
+        this.documentManageRepository = documentManageRepository;
+        this.userManagerRepository = userManagerRepository;
+    }
+
+    public List<PermissionManager> getAllPermissions() {
+        return permissionManagerRepository.findAll();
+    }
+
+    public List<PermissionManager> getPermissionsByDocumentId(Integer docId) {
+        return permissionManagerRepository.findByDocument_DocId(docId);
+    }
+
+    public PermissionManager getPermissionById(Integer id) {
+        return permissionManagerRepository
+                .findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Permission not found with id: " + id));
+    }
+
+    public PermissionManager createPermission(Integer docId, Integer userId, String accessType) {
+        DocumentManage document = documentManageRepository
+                .findById(docId)
+                .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + docId));
+
+        UserManager user = userManagerRepository
+                .findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+
+        PermissionManager permission = new PermissionManager();
+        permission.setDocument(document);
+        permission.setUser(user);
+        permission.setAccessType(normalizeAccessType(accessType));
+
+        return permissionManagerRepository.save(permission);
+    }
+
+    public PermissionManager updatePermission(Integer id, String accessType) {
+        PermissionManager existing = getPermissionById(id);
+        existing.setAccessType(normalizeAccessType(accessType));
+        return permissionManagerRepository.save(existing);
+    }
+
+    public void deletePermissionById(Integer id) {
+        if (!permissionManagerRepository.existsById(id)) {
+            throw new IllegalArgumentException("Permission not found with id: " + id);
+        }
+        permissionManagerRepository.deleteById(id);
+    }
+
+    public PermissionResponseDto toDto(PermissionManager p) {
+        Integer docId = p.getDocument() != null ? p.getDocument().getDocId() : null;
+        Integer userId = p.getUser() != null ? p.getUser().getUserId() : null;
+        String userName = p.getUser() != null ? p.getUser().getName() : null;
+        String userEmail = p.getUser() != null ? p.getUser().getEmail() : null;
+
+        return new PermissionResponseDto(
+                p.getPermId(),
+                docId,
+                userId,
+                userName,
+                userEmail,
+                normalizeAccessType(p.getAccessType()));
+    }
+
+    private String normalizeAccessType(String raw) {
+        if (raw == null) return "VIEWER";
+        String value = raw.trim().toUpperCase();
+        if (!"OWNER".equals(value) && !"EDITOR".equals(value) && !"VIEWER".equals(value)) {
+            return "VIEWER";
+        }
+        return value;
+    }
+}
+
+================================================================
+4) Permission Controller
+================================================================
+package com.saigontechnologyintern.document_management.permissionManagement;
+
+import java.util.List;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/permissions")
+@CrossOrigin(origins = "*")
+public class PermissionManagerController {
+    private final PermissionManagerService permissionManagerService;
+
+    public PermissionManagerController(PermissionManagerService permissionManagerService) {
+        this.permissionManagerService = permissionManagerService;
+    }
+
+    @GetMapping
+    public List<PermissionResponseDto> getPermissions(@RequestParam(value = "doc_id", required = false) Integer docId) {
+        List<PermissionManager> data = (docId != null)
+                ? permissionManagerService.getPermissionsByDocumentId(docId)
+                : permissionManagerService.getAllPermissions();
+
+        return data.stream().map(permissionManagerService::toDto).toList();
+    }
+
+    @GetMapping("/{id}")
+    public PermissionResponseDto getPermissionById(@PathVariable Integer id) {
+        return permissionManagerService.toDto(permissionManagerService.getPermissionById(id));
+    }
+
+    @PostMapping
+    public PermissionResponseDto createPermission(@RequestBody PermissionCreateRequest request) {
+        PermissionManager created = permissionManagerService.createPermission(
+                request.getDoc_id(),
+                request.getUser_id(),
+                request.getAccess_type());
+        return permissionManagerService.toDto(created);
+    }
+
+    @PatchMapping("/{id}")
+    public PermissionResponseDto updatePermission(@PathVariable Integer id, @RequestBody PermissionUpdateRequest request) {
+        PermissionManager updated = permissionManagerService.updatePermission(id, request.getAccess_type());
+        return permissionManagerService.toDto(updated);
+    }
+
+    @DeleteMapping("/{id}")
+    public void deletePermission(@PathVariable Integer id) {
+        permissionManagerService.deletePermissionById(id);
+    }
+
+    public static class PermissionCreateRequest {
+        private Integer doc_id;
+        private Integer user_id;
+        private String access_type;
+
+        public Integer getDoc_id() {
+            return doc_id;
+        }
+
+        public void setDoc_id(Integer doc_id) {
+            this.doc_id = doc_id;
+        }
+
+        public Integer getUser_id() {
+            return user_id;
+        }
+
+        public void setUser_id(Integer user_id) {
+            this.user_id = user_id;
+        }
+
+        public String getAccess_type() {
+            return access_type;
+        }
+
+        public void setAccess_type(String access_type) {
+            this.access_type = access_type;
+        }
+    }
+
+    public static class PermissionUpdateRequest {
+        private String access_type;
+
+        public String getAccess_type() {
+            return access_type;
+        }
+
+        public void setAccess_type(String access_type) {
+            this.access_type = access_type;
+        }
+    }
+}
+
+================================================================
+5) Sharing DTO
+================================================================
+package com.saigontechnologyintern.document_management.sharingRequestManagement;
+
+import java.time.LocalDateTime;
+
+public class SharingRequestResponseDto {
+    private Integer request_id;
+    private Integer doc_id;
+    private Integer requester_id;
+    private String requester_name;
+    private String requester_email;
+    private String permission;
+    private String status;
+    private LocalDateTime requested_at;
+
+    public SharingRequestResponseDto() {}
+
+    public SharingRequestResponseDto(
+            Integer request_id,
+            Integer doc_id,
+            Integer requester_id,
+            String requester_name,
+            String requester_email,
+            String permission,
+            String status,
+            LocalDateTime requested_at) {
+        this.request_id = request_id;
+        this.doc_id = doc_id;
+        this.requester_id = requester_id;
+        this.requester_name = requester_name;
+        this.requester_email = requester_email;
+        this.permission = permission;
+        this.status = status;
+        this.requested_at = requested_at;
+    }
+
+    public Integer getRequest_id() {
+        return request_id;
+    }
+
+    public void setRequest_id(Integer request_id) {
+        this.request_id = request_id;
+    }
+
+    public Integer getDoc_id() {
+        return doc_id;
+    }
+
+    public void setDoc_id(Integer doc_id) {
+        this.doc_id = doc_id;
+    }
+
+    public Integer getRequester_id() {
+        return requester_id;
+    }
+
+    public void setRequester_id(Integer requester_id) {
+        this.requester_id = requester_id;
+    }
+
+    public String getRequester_name() {
+        return requester_name;
+    }
+
+    public void setRequester_name(String requester_name) {
+        this.requester_name = requester_name;
+    }
+
+    public String getRequester_email() {
+        return requester_email;
+    }
+
+    public void setRequester_email(String requester_email) {
+        this.requester_email = requester_email;
+    }
+
+    public String getPermission() {
+        return permission;
+    }
+
+    public void setPermission(String permission) {
+        this.permission = permission;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public LocalDateTime getRequested_at() {
+        return requested_at;
+    }
+
+    public void setRequested_at(LocalDateTime requested_at) {
+        this.requested_at = requested_at;
+    }
+}
+
+================================================================
+6) Sharing Repository
+================================================================
+package com.saigontechnologyintern.document_management.sharingRequestManagement;
+
+import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface SharingRequestManagerRepository extends JpaRepository<SharingRequestManager, Integer> {
+    List<SharingRequestManager> findByStatus(String status);
+    List<SharingRequestManager> findByDocument_DocId(Integer docId);
+    List<SharingRequestManager> findByStatusAndDocument_DocId(String status, Integer docId);
+}
+
+================================================================
+7) Sharing Service
+================================================================
+package com.saigontechnologyintern.document_management.sharingRequestManagement;
+
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManage;
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManageRepository;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManager;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManagerRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.List;
+import org.springframework.stereotype.Service;
+
+@Service
+public class SharingRequestManagerService {
+    private final SharingRequestManagerRepository sharingRequestManagerRepository;
+    private final DocumentManageRepository documentManageRepository;
+    private final UserManagerRepository userManagerRepository;
+    private final PermissionManagerRepository permissionManagerRepository;
+
+    public SharingRequestManagerService(
+            SharingRequestManagerRepository sharingRequestManagerRepository,
+            DocumentManageRepository documentManageRepository,
+            UserManagerRepository userManagerRepository,
+            PermissionManagerRepository permissionManagerRepository) {
+        this.sharingRequestManagerRepository = sharingRequestManagerRepository;
+        this.documentManageRepository = documentManageRepository;
+        this.userManagerRepository = userManagerRepository;
+        this.permissionManagerRepository = permissionManagerRepository;
+    }
+
+    public List<SharingRequestManager> getAllSharingRequests() {
+        return sharingRequestManagerRepository.findAll();
+    }
+
+    public List<SharingRequestManager> getSharingRequestsByStatus(String status) {
+        return sharingRequestManagerRepository.findByStatus(normalizeStatus(status));
+    }
+
+    public List<SharingRequestManager> getSharingRequestsByDocumentId(Integer docId) {
+        return sharingRequestManagerRepository.findByDocument_DocId(docId);
+    }
+
+    public List<SharingRequestManager> getSharingRequestsByStatusAndDocumentId(String status, Integer docId) {
+        return sharingRequestManagerRepository.findByStatusAndDocument_DocId(normalizeStatus(status), docId);
+    }
+
+    public SharingRequestManager getSharingRequestById(Integer id) {
+        return sharingRequestManagerRepository
+                .findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Sharing request not found with id: " + id));
+    }
+
+    public SharingRequestManager createSharingRequest(Integer docId, Integer requesterId, String permission) {
+        DocumentManage document = documentManageRepository
+                .findById(docId)
+                .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + docId));
+
+        UserManager requester = userManagerRepository
+                .findById(requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + requesterId));
+
+        SharingRequestManager entity = new SharingRequestManager();
+        entity.setDocument(document);
+        entity.setRequester(requester);
+        entity.setStatus("PENDING");
+        // Permission level is returned in DTO field (not persisted in current table).
+        SharingRequestManager saved = sharingRequestManagerRepository.save(entity);
+
+        return saved;
+    }
+
+    public SharingRequestManager approveSharingRequest(Integer id) {
+        SharingRequestManager request = getSharingRequestById(id);
+        request.setStatus("APPROVED");
+        SharingRequestManager saved = sharingRequestManagerRepository.save(request);
+
+        // Optional: grant permission when approved (defaults to VIEWER if no richer model yet).
+        if (request.getDocument() != null && request.getRequester() != null) {
+            PermissionManager permission = new PermissionManager();
+            permission.setDocument(request.getDocument());
+            permission.setUser(request.getRequester());
+            permission.setAccessType("VIEWER");
+            permissionManagerRepository.save(permission);
+        }
+
+        return saved;
+    }
+
+    public SharingRequestManager rejectSharingRequest(Integer id) {
+        SharingRequestManager request = getSharingRequestById(id);
+        request.setStatus("REJECTED");
+        return sharingRequestManagerRepository.save(request);
+    }
+
+    public SharingRequestResponseDto toDto(SharingRequestManager r) {
+        Integer docId = r.getDocument() != null ? r.getDocument().getDocId() : null;
+        Integer requesterId = r.getRequester() != null ? r.getRequester().getUserId() : null;
+        String requesterName = r.getRequester() != null ? r.getRequester().getName() : null;
+        String requesterEmail = r.getRequester() != null ? r.getRequester().getEmail() : null;
+
+        return new SharingRequestResponseDto(
+                r.getRequestId(),
+                docId,
+                requesterId,
+                requesterName,
+                requesterEmail,
+                "VIEWER",
+                normalizeStatus(r.getStatus()),
+                r.getRequestedAt());
+    }
+
+    private String normalizeStatus(String raw) {
+        if (raw == null) return "PENDING";
+        String value = raw.trim().toUpperCase();
+        if (!"PENDING".equals(value) && !"APPROVED".equals(value) && !"REJECTED".equals(value)) {
+            return "PENDING";
+        }
+        return value;
+    }
+}
+
+================================================================
+8) Sharing Controller
+================================================================
+package com.saigontechnologyintern.document_management.sharingRequestManagement;
+
+import java.util.List;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/sharing-requests")
+@CrossOrigin(origins = "*")
+public class SharingRequestManagerController {
+    private final SharingRequestManagerService sharingRequestManagerService;
+
+    public SharingRequestManagerController(SharingRequestManagerService sharingRequestManagerService) {
+        this.sharingRequestManagerService = sharingRequestManagerService;
+    }
+
+    @GetMapping
+    public List<SharingRequestResponseDto> getSharingRequests(
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "doc_id", required = false) Integer docId) {
+
+        List<SharingRequestManager> data;
+        if (status != null && docId != null) {
+            data = sharingRequestManagerService.getSharingRequestsByStatusAndDocumentId(status, docId);
+        } else if (status != null) {
+            data = sharingRequestManagerService.getSharingRequestsByStatus(status);
+        } else if (docId != null) {
+            data = sharingRequestManagerService.getSharingRequestsByDocumentId(docId);
+        } else {
+            data = sharingRequestManagerService.getAllSharingRequests();
+        }
+
+        return data.stream().map(sharingRequestManagerService::toDto).toList();
+    }
+
+    @PostMapping
+    public SharingRequestResponseDto createSharingRequest(@RequestBody SharingRequestCreateRequest request) {
+        SharingRequestManager created = sharingRequestManagerService.createSharingRequest(
+                request.getDoc_id(),
+                request.getUser_id(),
+                request.getPermission());
+        return sharingRequestManagerService.toDto(created);
+    }
+
+    @PostMapping("/{id}/approve")
+    public SharingRequestResponseDto approveSharingRequest(@PathVariable Integer id) {
+        return sharingRequestManagerService.toDto(sharingRequestManagerService.approveSharingRequest(id));
+    }
+
+    @PostMapping("/{id}/reject")
+    public SharingRequestResponseDto rejectSharingRequest(@PathVariable Integer id) {
+        return sharingRequestManagerService.toDto(sharingRequestManagerService.rejectSharingRequest(id));
+    }
+
+    public static class SharingRequestCreateRequest {
+        private Integer doc_id;
+        private Integer user_id;
+        private String permission;
+
+        public Integer getDoc_id() {
+            return doc_id;
+        }
+
+        public void setDoc_id(Integer doc_id) {
+            this.doc_id = doc_id;
+        }
+
+        public Integer getUser_id() {
+            return user_id;
+        }
+
+        public void setUser_id(Integer user_id) {
+            this.user_id = user_id;
+        }
+
+        public String getPermission() {
+            return permission;
+        }
+
+        public void setPermission(String permission) {
+            this.permission = permission;
+        }
+    }
+}
+
+================================================================
+9) OPTIONAL DATA NORMALIZATION SQL
+================================================================
+UPDATE permissions SET access_type = UPPER(access_type);
+UPDATE sharing_requests SET status = UPPER(status);
+
+================================================================
+10) NOTES
+================================================================
+- This keeps your existing table schema unchanged.
+- It returns frontend-compatible keys in snake_case.
+- It avoids entity circular serialization by returning DTOs.

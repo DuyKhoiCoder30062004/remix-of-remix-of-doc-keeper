@@ -1,0 +1,152 @@
+-- ============================================================
+-- SEED DATA for document_management PostgreSQL database
+-- Run these statements in order (top to bottom) in pgAdmin4
+-- or psql connected to: document_management
+-- ============================================================
+-- NOTE ON PASSWORDS:
+--   Passwords below are plain text for development convenience.
+--   If you configure Spring Security with BCryptPasswordEncoder,
+--   replace each password value with its BCrypt hash.
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- 1. USERS  (insert first — other tables reference user_id)
+-- ------------------------------------------------------------
+-- role check: 'Admin' or 'User'  (capital first letter)
+
+INSERT INTO users (name, email, password, role) VALUES
+  ('Marcus Thorne',    'admin@firm.com',  'admin123',  'Admin'),
+  ('Sarah Jenkins',    'sarah@firm.com',  'sarah123',  'User'),
+  ('Elena Rodriguez',  'elena@firm.com',  'elena123',  'User'),
+  ('David Chen',       'david@firm.com',  'david123',  'User'),
+  ('Priya Nair',       'priya@firm.com',  'priya123',  'User');
+
+-- After insert, user_ids will be auto-assigned: 1=Marcus, 2=Sarah, 3=Elena, 4=David, 5=Priya
+-- Verify with: SELECT user_id, name, email, role FROM users;
+
+
+-- ------------------------------------------------------------
+-- 2. FOLDERS  (insert before documents — documents reference folder_id)
+-- ------------------------------------------------------------
+
+INSERT INTO folders (name, owner_id) VALUES
+  ('Finance', 1),   -- owned by Marcus (Admin)
+  ('HR',      1),   -- owned by Marcus (Admin)
+  ('Legal',   2);   -- owned by Sarah
+
+-- After insert, folder_ids will be: 1=Finance, 2=HR, 3=Legal
+-- Verify with: SELECT folder_id, name, owner_id FROM folders;
+
+
+-- ------------------------------------------------------------
+-- 3. DOCUMENTS
+-- ------------------------------------------------------------
+-- metadata is jsonb — pass as JSON object
+
+INSERT INTO documents (title, owner_id, folder_id, metadata) VALUES
+  (
+    'Q4_Audit_Report.pdf',
+    2,   -- owner: Sarah
+    1,   -- folder: Finance
+    '{"mime_type": "application/pdf", "size_bytes": 4200000, "extension": "PDF"}'
+  ),
+  (
+    'Payroll_Master_Sheet_2024.xlsx',
+    1,   -- owner: Marcus (Admin)
+    2,   -- folder: HR
+    '{"mime_type": "application/vnd.ms-excel", "size_bytes": 1800000, "extension": "XLS"}'
+  ),
+  (
+    'Service_Agreement_v4.pdf',
+    2,   -- owner: Sarah
+    3,   -- folder: Legal
+    '{"mime_type": "application/pdf", "size_bytes": 892000, "extension": "PDF"}'
+  ),
+  (
+    'Employee_Handbook.docx',
+    3,   -- owner: Elena
+    2,   -- folder: HR
+    '{"mime_type": "application/msword", "size_bytes": 640000, "extension": "DOC"}'
+  ),
+  (
+    'Board_Meeting_Photo.png',
+    1,   -- owner: Marcus (Admin)
+    NULL, -- no folder
+    '{"mime_type": "image/png", "size_bytes": 2100000, "extension": "IMG"}'
+  );
+
+-- After insert, doc_ids will be: 1=Q4_Audit, 2=Payroll, 3=Service_Agreement, 4=Employee_Handbook, 5=Board_Photo
+-- Verify with: SELECT doc_id, title, owner_id, folder_id FROM documents;
+
+
+-- ------------------------------------------------------------
+-- 4. PERMISSIONS
+-- ------------------------------------------------------------
+-- access_type check: 'Owner', 'Editor', 'Viewer'  (capital first letter)
+
+INSERT INTO permissions (doc_id, user_id, access_type) VALUES
+  (1, 2, 'Owner'),    
+  (2, 1, 'Owner'),    
+  (3, 2, 'Owner'),    
+  (3, 4, 'Editor'),   
+  (3, 5, 'Viewer'),   
+  (4, 3, 'Owner'),    
+  (5, 1, 'Owner');   
+  -- Sarah owns Q4_Audit_Report
+  -- Marcus owns Payroll_Master_Sheet
+  -- Sarah owns Service_Agreement
+  -- David is Editor on Service_Agreement
+  -- Priya is Viewer on Service_Agreement
+  -- Elena owns Employee_Handbook
+   -- Marcus owns Board_Meeting_Photo
+
+-- Verify with: SELECT p.perm_id, d.title, u.name, p.access_type
+--              FROM permissions p
+--              JOIN documents d ON p.doc_id = d.doc_id
+--              JOIN users u ON p.user_id = u.user_id;
+
+
+-- ------------------------------------------------------------
+-- 5. SHARING REQUESTS
+-- ------------------------------------------------------------
+-- status check: 'Pending', 'Approved', 'Rejected'  (capital first letter)
+
+INSERT INTO sharing_requests (doc_id, requester_id, status) VALUES
+  (3, 3, 'Pending'),  
+  (1, 4, 'Approved'); 
+    -- Elena requests access to Service_Agreement (owned by Sarah)
+    -- David was approved access to Q4_Audit_Report
+
+-- Verify with: SELECT sr.request_id, d.title, u.name AS requester, sr.status
+--              FROM sharing_requests sr
+--              JOIN documents d ON sr.doc_id = d.doc_id
+--              JOIN users u ON sr.requester_id = u.user_id;
+
+
+-- ============================================================
+-- QUICK VERIFICATION QUERIES
+-- ============================================================
+
+-- Check all tables are populated:
+-- SELECT 'users' AS tbl, COUNT(*) FROM users
+-- UNION ALL SELECT 'folders',          COUNT(*) FROM folders
+-- UNION ALL SELECT 'documents',        COUNT(*) FROM documents
+-- UNION ALL SELECT 'permissions',      COUNT(*) FROM permissions
+-- UNION ALL SELECT 'sharing_requests', COUNT(*) FROM sharing_requests;
+
+-- Expected result:
+--   users            | 5
+--   folders          | 3
+--   documents        | 5
+--   permissions      | 7
+--   sharing_requests | 2
+
+
+-- ============================================================
+-- TO RESET AND RE-SEED (clears all data and restarts sequences)
+-- ============================================================
+
+-- TRUNCATE sharing_requests, permissions, documents, folders, users
+--   RESTART IDENTITY CASCADE;
+-- Then re-run all INSERT statements above.

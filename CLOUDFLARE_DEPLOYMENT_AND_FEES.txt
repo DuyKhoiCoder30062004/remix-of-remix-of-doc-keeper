@@ -1,0 +1,224 @@
+Cloudflare Deployment Guide For This Project
+
+Project status
+- This frontend is currently built for Cloudflare-style SSR output.
+- Current generated runtime target: .output/server/index.mjs
+- Current generated static assets folder: .output/public
+- Current generated Wrangler config: .output/server/wrangler.json
+- Current frontend API base URL from .env.local: http://34.228.143.155:8080
+
+What this means
+- You do NOT need S3 for the frontend if you deploy this app on Cloudflare.
+- Cloudflare Workers can run the SSR/server output directly.
+- Your Spring Boot backend can stay separate on AWS or anywhere else.
+
+==================================================
+STEP-BY-STEP DEPLOYMENT
+==================================================
+
+Step 1: Prepare accounts
+1. Create or sign in to your Cloudflare account.
+2. Make sure your project is working locally.
+3. Make sure your backend URL is correct in .env.local before building.
+
+Current .env.local example in this repo
+- VITE_USE_MOCK=false
+- VITE_API_BASE_URL=http://34.228.143.155:8080
+
+Step 2: Install dependencies
+Run this in the project root:
+
+npm install
+
+Step 3: Install Wrangler locally
+If Wrangler is not installed yet, run:
+
+npm install -D wrangler
+
+Why
+- Wrangler is Cloudflare's CLI tool.
+- It is used to log in, deploy, and manage the Worker.
+
+Step 4: Log in to Cloudflare from terminal
+Run:
+
+npx wrangler login
+
+What happens
+- A browser window opens.
+- Authorize Wrangler to access your Cloudflare account.
+
+Step 5: Build the app
+Run:
+
+npm run build
+
+Expected result
+- Cloudflare-ready output is created under .output
+- Server entry: .output/server/index.mjs
+- Public assets: .output/public
+
+Step 6: Deploy to Cloudflare
+Simplest command:
+
+npx wrangler deploy
+
+Important note
+- Cloudflare documentation says Wrangler can auto-detect TanStack Start projects and deploy them.
+- For this project, the generated output already indicates a Cloudflare module preset.
+
+If needed, deploy from the generated output folder instead:
+
+npx wrangler --cwd .output/server deploy
+
+What happens
+- Cloudflare uploads the Worker code.
+- Cloudflare attaches the static assets directory.
+- You receive a workers.dev URL after deployment.
+
+Step 7: Open the deployed URL
+After deploy, Cloudflare gives you a URL similar to:
+
+https://your-worker-name.your-subdomain.workers.dev
+
+Open it in browser and test:
+1. Login
+2. Register
+3. Dashboard loading
+4. Folder page
+5. Document detail page
+6. Sharing requests page
+
+Step 8: If the frontend loads but API calls fail
+This is the most likely post-deploy issue.
+
+Reason
+- Your backend CORS currently allows localhost and lovableproject domains.
+- Your deployed Cloudflare domain may not yet be allowed by the Spring Boot backend.
+
+Symptom
+- Login/register/request screens may spin or fail.
+- Browser console/network tab may show CORS errors.
+
+What to do
+1. Allow your Cloudflare domain in backend CORS.
+2. Redeploy backend if needed.
+3. Retry frontend requests.
+
+Step 9: Optional custom domain
+If you want your own domain instead of workers.dev:
+1. Go to Cloudflare Dashboard.
+2. Open Workers & Pages.
+3. Open your Worker.
+4. Add a Custom Domain.
+5. Attach your domain or subdomain.
+
+Example
+- app.yourdomain.com
+
+Step 10: Update backend CORS for custom domain too
+If you move from workers.dev to your own domain, backend CORS must allow that custom domain as well.
+
+==================================================
+LOCAL COMMAND SUMMARY
+==================================================
+
+Use these commands in order:
+
+npm install
+npm install -D wrangler
+npx wrangler login
+npm run build
+npx wrangler deploy
+
+Fallback if needed:
+
+npx wrangler --cwd .output/server deploy
+
+==================================================
+WHAT FILES MATTER FOR DEPLOYMENT
+==================================================
+
+Main frontend source and config
+- package.json
+- vite.config.ts
+- .env.local
+
+Generated deploy output
+- .output/nitro.json
+- .output/server/index.mjs
+- .output/server/wrangler.json
+- .output/public
+
+==================================================
+FEES / PRICING NOTES
+==================================================
+
+Important
+- Prices can change over time.
+- Always verify the latest official Cloudflare pricing page before production launch.
+
+Cloudflare Workers pricing referenced at the time of writing
+
+Free plan
+- 100,000 requests per day
+- 10 ms CPU time per invocation
+- Static assets requests are generally free and unlimited
+
+Paid Workers plan
+- Base price: 5 USD per month
+- Includes 10 million requests per month
+- Includes 30 million CPU milliseconds per month
+- Additional requests: 0.30 USD per additional 1 million requests
+- Additional CPU time: 0.02 USD per additional 1 million CPU milliseconds
+- Static asset requests are free and unlimited
+- No extra egress bandwidth charge for Workers pricing noted in the docs
+
+Simple cost interpretation for your kind of app
+- Small personal/demo/testing app: often free or near-free
+- Light production app: often 5 USD per month if usage is modest
+- Cost rises mainly when Worker requests and CPU time grow significantly
+
+Example from Cloudflare docs
+- 15 million requests/month
+- Average 7 ms CPU/request
+- Approx total: 8 USD/month in their example
+
+Best expectation for your app initially
+- If traffic is low, cost will likely stay very low.
+- If most traffic is static assets, billing impact is even lower.
+- Your backend hosting/database costs are separate and are NOT included in Cloudflare Workers pricing.
+
+==================================================
+THINGS THAT ARE NOT INCLUDED IN THE FRONTEND WORKER COST
+==================================================
+
+These are separate from Cloudflare frontend Worker charges:
+1. AWS RDS charges
+2. Spring Boot backend hosting charges
+3. Domain registration costs
+4. Any extra Cloudflare products you may add later
+
+==================================================
+PRACTICAL RECOMMENDATION
+==================================================
+
+Best low-risk deployment flow for this repo
+1. Keep backend where it is.
+2. Deploy this frontend to Cloudflare Workers.
+3. Test login/register and every panel.
+4. If requests fail, fix backend CORS to allow the Cloudflare frontend domain.
+5. After that, add a custom domain if needed.
+
+==================================================
+OFFICIAL REFERENCES USED
+==================================================
+
+Cloudflare TanStack Start deployment docs
+- https://developers.cloudflare.com/workers/framework-guides/web-apps/tanstack/
+
+Cloudflare Wrangler commands docs
+- https://developers.cloudflare.com/workers/wrangler/commands/
+
+Cloudflare Workers pricing docs
+- https://developers.cloudflare.com/workers/platform/pricing/

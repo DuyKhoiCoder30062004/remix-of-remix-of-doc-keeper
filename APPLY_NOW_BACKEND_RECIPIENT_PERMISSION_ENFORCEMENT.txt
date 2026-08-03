@@ -1,0 +1,900 @@
+APPLY NOW - BACKEND RECIPIENT ACCEPT + PERMISSION ENFORCEMENT
+
+Based on the classes you pasted, apply these exact changes.
+
+================================================================
+0) IMPORTANT GAPS FOUND IN YOUR CURRENT CODE
+================================================================
+1. Sharing request approval/rejection has no actor validation.
+   - Any authenticated caller can approve/reject any request.
+2. Sharing request permission is not persisted.
+   - Service hardcodes "Viewer" in DTO and on approval.
+3. Document visibility is owner-only.
+   - Shared recipients cannot see shared docs in list/get.
+4. Document authorization is owner-only.
+   - Editor/Viewer permissions are ignored.
+5. Permission normalization bug:
+   - normalizeAccessType uses toUpperCase but compares Title-Case => always fallback.
+6. Sharing status normalization bug:
+   - normalizeStatus uses toUpperCase but compares Title-Case => always fallback.
+
+================================================================
+1) SHARING REQUEST ENTITY + DB: PERSIST PERMISSION
+================================================================
+In SharingRequestManager entity add column:
+
+@Column(name = "permission", nullable = false, length = 20)
+private String permission;
+
+Add getter/setter for permission.
+
+DB migration:
+ALTER TABLE sharing_requests ADD COLUMN IF NOT EXISTS permission varchar(20);
+UPDATE sharing_requests SET permission = 'Viewer' WHERE permission IS NULL;
+ALTER TABLE sharing_requests ALTER COLUMN permission SET NOT NULL;
+
+================================================================
+2) SHARING REPOSITORY: ADD RECIPIENT FILTER
+================================================================
+In SharingRequestManagerRepository add:
+
+List<SharingRequestManager> findByRequester_UserId(Integer userId);
+List<SharingRequestManager> findByRequester_UserIdAndStatus(Integer userId, String status);
+
+================================================================
+3) SHARING SERVICE: ENFORCE RECIPIENT-ONLY ACCEPT/REJECT
+================================================================
+Change service signatures:
+
+public SharingRequestManager createSharingRequest(Integer docId, Integer recipientUserId, String permission, Integer actorUserId)
+public SharingRequestManager approveSharingRequest(Integer id, Integer actorUserId)
+public SharingRequestManager rejectSharingRequest(Integer id, Integer actorUserId)
+public List<SharingRequestManager> getIncomingRequests(Integer actorUserId, String status, Integer docId)
+
+3.1 createSharingRequest implementation rules:
+- Load document.
+- Validate actor can share that document:
+  - owner OR admin OR Owner permission.
+- Load recipient user by recipientUserId.
+- Save request:
+  - requester = recipient user (recipient model)
+  - status = "Pending"
+  - permission = normalizeAccessType(permission)
+
+3.2 approveSharingRequest rules:
+- Load request.
+- Validate actorUserId == request.getRequester().getUserId() (recipient-only).
+- request.setStatus("Approved").
+- Upsert permission row for (doc, recipient):
+  - if existing permission row -> update access type to request.permission
+  - else create new permission row with access type request.permission
+
+3.3 rejectSharingRequest rules:
+- Validate actorUserId == request.getRequester().getUserId().
+- request.setStatus("Rejected").
+
+3.4 replace normalizeStatus with title-case safe:
+
+private String normalizeStatus(String raw) {
+    if (raw == null) return "Pending";
+    String value = raw.trim().toLowerCase();
+    if ("pending".equals(value)) return "Pending";
+    if ("approved".equals(value)) return "Approved";
+    if ("rejected".equals(value)) return "Rejected";
+    return "Pending";
+}
+
+3.5 use permission from entity in toDto:
+- Replace hardcoded "Viewer" with normalizeAccessType(r.getPermission()).
+
+3.6 Copy-paste code for section 3
+
+In PermissionManagerRepository add:
+
+import java.util.Optional;
+
+Optional<PermissionManager> findByDocument_DocIdAndUser_UserId(Integer docId, Integer userId);
+
+In SharingRequestManagerRepository add:
+
+List<SharingRequestManager> findByRequester_UserId(Integer userId);
+List<SharingRequestManager> findByRequester_UserIdAndStatus(Integer userId, String status);
+
+Replace SharingRequestManagerService with:
+
+package com.saigontechnologyintern.document_management.sharingRequestManagement;
+
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManage;
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManageRepository;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManager;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManagerRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.List;
+import org.springframework.stereotype.Service;
+
+@Service
+public class SharingRequestManagerService {
+  private final SharingRequestManagerRepository sharingRequestManagerRepository;
+  private final DocumentManageRepository documentManageRepository;
+  private final UserManagerRepository userManagerRepository;
+  private final PermissionManagerRepository permissionManagerRepository;
+
+  public SharingRequestManagerService(
+      SharingRequestManagerRepository sharingRequestManagerRepository,
+      DocumentManageRepository documentManageRepository,
+      UserManagerRepository userManagerRepository,
+      PermissionManagerRepository permissionManagerRepository) {
+    this.sharingRequestManagerRepository = sharingRequestManagerRepository;
+    this.documentManageRepository = documentManageRepository;
+    this.userManagerRepository = userManagerRepository;
+    this.permissionManagerRepository = permissionManagerRepository;
+  }
+
+  public List<SharingRequestManager> getAllSharingRequests() {
+    return sharingRequestManagerRepository.findAll();
+  }
+
+  public List<SharingRequestManager> getSharingRequestsByStatus(String status) {
+    return sharingRequestManagerRepository.findByStatus(normalizeStatus(status));
+  }
+
+  public List<SharingRequestManager> getSharingRequestsByDocumentId(Integer docId) {
+    return sharingRequestManagerRepository.findByDocument_DocId(docId);
+  }
+
+  public List<SharingRequestManager> getSharingRequestsByStatusAndDocumentId(String status, Integer docId) {
+    return sharingRequestManagerRepository.findByStatusAndDocument_DocId(normalizeStatus(status), docId);
+  }
+
+  public List<SharingRequestManager> getIncomingRequests(Integer actorUserId, String status, Integer docId) {
+    if (status != null && docId != null) {
+      return sharingRequestManagerRepository
+          .findByRequester_UserIdAndStatus(actorUserId, normalizeStatus(status))
+          .stream()
+          .filter(r -> r.getDocument() != null && docId.equals(r.getDocument().getDocId()))
+          .toList();
+    }
+    if (status != null) {
+      return sharingRequestManagerRepository.findByRequester_UserIdAndStatus(actorUserId, normalizeStatus(status));
+    }
+    if (docId != null) {
+      return sharingRequestManagerRepository.findByRequester_UserId(actorUserId).stream()
+          .filter(r -> r.getDocument() != null && docId.equals(r.getDocument().getDocId()))
+          .toList();
+    }
+    return sharingRequestManagerRepository.findByRequester_UserId(actorUserId);
+  }
+
+  public SharingRequestManager getSharingRequestById(Integer id) {
+    return sharingRequestManagerRepository
+        .findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Sharing request not found with id: " + id));
+  }
+
+  public SharingRequestManager createSharingRequest(
+      Integer docId,
+      Integer recipientUserId,
+      String permission,
+      Integer actorUserId) {
+
+    DocumentManage document = documentManageRepository
+        .findById(docId)
+        .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + docId));
+
+    if (document.getOwner() == null || !document.getOwner().getUserId().equals(actorUserId)) {
+      throw new IllegalArgumentException("Only document owner can share this document");
+    }
+
+    UserManager recipient = userManagerRepository
+        .findById(recipientUserId)
+        .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + recipientUserId));
+
+    SharingRequestManager entity = new SharingRequestManager();
+    entity.setDocument(document);
+    entity.setRequester(recipient);
+    entity.setStatus("Pending");
+    entity.setPermission(normalizeAccessType(permission));
+
+    return sharingRequestManagerRepository.save(entity);
+  }
+
+  public SharingRequestManager approveSharingRequest(Integer id, Integer actorUserId) {
+    SharingRequestManager request = getSharingRequestById(id);
+
+    if (request.getRequester() == null || !request.getRequester().getUserId().equals(actorUserId)) {
+      throw new IllegalArgumentException("Only recipient can approve this request");
+    }
+
+    request.setStatus("Approved");
+    SharingRequestManager saved = sharingRequestManagerRepository.save(request);
+
+    if (request.getDocument() != null && request.getRequester() != null) {
+      Integer docId = request.getDocument().getDocId();
+      Integer userId = request.getRequester().getUserId();
+
+      PermissionManager permission = permissionManagerRepository
+          .findByDocument_DocIdAndUser_UserId(docId, userId)
+          .orElseGet(() -> {
+            PermissionManager p = new PermissionManager();
+            p.setDocument(request.getDocument());
+            p.setUser(request.getRequester());
+            return p;
+          });
+
+      permission.setAccessType(normalizeAccessType(request.getPermission()));
+      permissionManagerRepository.save(permission);
+    }
+
+    return saved;
+  }
+
+  public SharingRequestManager rejectSharingRequest(Integer id, Integer actorUserId) {
+    SharingRequestManager request = getSharingRequestById(id);
+
+    if (request.getRequester() == null || !request.getRequester().getUserId().equals(actorUserId)) {
+      throw new IllegalArgumentException("Only recipient can reject this request");
+    }
+
+    request.setStatus("Rejected");
+    return sharingRequestManagerRepository.save(request);
+  }
+
+  public SharingRequestResponseDto toDto(SharingRequestManager r) {
+    Integer docId = r.getDocument() != null ? r.getDocument().getDocId() : null;
+    Integer requesterId = r.getRequester() != null ? r.getRequester().getUserId() : null;
+    String requesterName = r.getRequester() != null ? r.getRequester().getName() : null;
+    String requesterEmail = r.getRequester() != null ? r.getRequester().getEmail() : null;
+
+    return new SharingRequestResponseDto(
+        r.getRequestId(),
+        docId,
+        requesterId,
+        requesterName,
+        requesterEmail,
+        normalizeAccessType(r.getPermission()),
+        normalizeStatus(r.getStatus()),
+        r.getRequestedAt());
+  }
+
+  private String normalizeStatus(String raw) {
+    if (raw == null) return "Pending";
+    String value = raw.trim().toLowerCase();
+    if ("pending".equals(value)) return "Pending";
+    if ("approved".equals(value)) return "Approved";
+    if ("rejected".equals(value)) return "Rejected";
+    return "Pending";
+  }
+
+  private String normalizeAccessType(String raw) {
+    if (raw == null) return "Viewer";
+    String value = raw.trim().toLowerCase();
+    if ("owner".equals(value)) return "Owner";
+    if ("editor".equals(value)) return "Editor";
+    if ("viewer".equals(value)) return "Viewer";
+    return "Viewer";
+  }
+}
+
+================================================================
+4) PERMISSION REPOSITORY + SERVICE FIXES
+================================================================
+4.1 In PermissionManagerRepository add:
+
+List<PermissionManager> findByUser_UserId(Integer userId);
+java.util.Optional<PermissionManager> findByDocument_DocIdAndUser_UserId(Integer docId, Integer userId);
+
+4.2 Fix normalizeAccessType in PermissionManagerService:
+
+private String normalizeAccessType(String raw) {
+    if (raw == null) return "Viewer";
+    String value = raw.trim().toLowerCase();
+    if ("owner".equals(value)) return "Owner";
+    if ("editor".equals(value)) return "Editor";
+    if ("viewer".equals(value)) return "Viewer";
+    return "Viewer";
+}
+
+4.3 Keep using normalizeAccessType in create/update/toDto.
+
+4.4 Troubleshoot getPermissions + getPermissionsByDocumentId mismatch
+
+If your controller fails to compile around getPermissions, replace the methods so the
+service returns List<PermissionManager> for listing/filtering and reserve Optional only
+for exact lookup helper.
+
+In PermissionManagerRepository ensure these methods exist:
+
+List<PermissionManager> findByDocument_DocId(Integer docId);
+List<PermissionManager> findByUser_UserId(Integer userId);
+java.util.Optional<PermissionManager> findByDocument_DocIdAndUser_UserId(Integer docId, Integer userId);
+
+In PermissionManagerService use this filtering shape:
+
+public List<PermissionManager> getPermissions(Integer docId, Integer userId) {
+  if (docId != null && userId != null) {
+    return permissionManagerRepository
+        .findByDocument_DocIdAndUser_UserId(docId, userId)
+        .stream()
+        .toList();
+  }
+  if (docId != null) {
+    return permissionManagerRepository.findByDocument_DocId(docId);
+  }
+  if (userId != null) {
+    return permissionManagerRepository.findByUser_UserId(userId);
+  }
+  return permissionManagerRepository.findAll();
+}
+
+public java.util.Optional<PermissionManager> getPermissionByDocumentAndUser(Integer docId, Integer userId) {
+  return permissionManagerRepository.findByDocument_DocIdAndUser_UserId(docId, userId);
+}
+
+Also ensure normalizeAccessType is title-case safe (do NOT use toUpperCase):
+
+private String normalizeAccessType(String raw) {
+  if (raw == null) return "Viewer";
+  String value = raw.trim().toLowerCase();
+  if ("owner".equals(value)) return "Owner";
+  if ("editor".equals(value)) return "Editor";
+  if ("viewer".equals(value)) return "Viewer";
+  return "Viewer";
+}
+
+In PermissionManagerController replace getPermissions with:
+
+@GetMapping
+public List<PermissionResponseDto> getPermissions(
+    @RequestParam(value = "doc_id", required = false) Integer docId,
+    @RequestParam(value = "user_id", required = false) Integer userId) {
+
+  List<PermissionManager> data = permissionManagerService.getPermissions(docId, userId);
+  return data.stream().map(permissionManagerService::toDto).toList();
+}
+
+Why this fixes your current error:
+- Your previous getPermissionsByDocumentId returned Optional<PermissionManager>.
+- Controller expected List<PermissionManager> and then called stream().map(...).
+- Returning List consistently for listing endpoints removes the type mismatch and supports:
+  - no params -> all permissions
+  - doc_id only -> all permissions on that doc
+  - user_id only -> all permissions for that user
+  - doc_id + user_id -> single row converted to one-item list (or empty list)
+
+================================================================
+5) DOCUMENT REPOSITORY: VISIBLE DOCS BY OWNER OR PERMISSION
+================================================================
+In DocumentManageRepository add:
+
+@org.springframework.data.jpa.repository.Query("""
+SELECT DISTINCT d
+FROM DocumentManage d
+LEFT JOIN PermissionManager p ON p.document = d
+WHERE d.owner.userId = :userId
+   OR (p.user.userId = :userId AND p.accessType IN ('Owner','Editor','Viewer'))
+""")
+List<DocumentManage> findVisibleDocumentsForUser(Integer userId);
+
+@org.springframework.data.jpa.repository.Query("""
+SELECT DISTINCT d
+FROM DocumentManage d
+LEFT JOIN PermissionManager p ON p.document = d
+WHERE (d.owner.userId = :userId OR (p.user.userId = :userId AND p.accessType IN ('Owner','Editor','Viewer')))
+  AND (:folderId IS NULL OR d.folder.folderId = :folderId)
+  AND (:q IS NULL OR LOWER(d.title) LIKE LOWER(CONCAT('%', :q, '%')))
+""")
+List<DocumentManage> findVisibleDocumentsForUserFiltered(Integer userId, Integer folderId, String q);
+
+5.1 If you get ERROR: function lower(bytea) does not exist
+
+Symptom from logs:
+- query fails at LOWER(d.title)
+- stack points to findVisibleDocumentsForUserFiltered(...)
+- error text: function lower(bytea) does not exist
+
+Root cause:
+- PostgreSQL sees documents.title as bytea (binary), not text/varchar.
+- LOWER(...) only works on text types.
+- So this is not an authorization error; request fails before auth response mapping.
+
+Fix checklist (apply all):
+
+1) DocumentManage entity mapping for title must be String mapped to text/varchar:
+
+@Column(name = "title", nullable = false)
+private String title;
+
+Do NOT use byte[] / Byte[] / @Lob on title.
+
+2) Ensure file bytes are only in file_data:
+
+@Lob
+@Column(name = "file_data", nullable = false)
+private byte[] fileData;
+
+3) Verify DB column type:
+
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'documents' AND column_name IN ('title', 'file_data');
+
+Expected:
+- title -> character varying (or text)
+- file_data -> bytea
+
+4) If title is bytea, migrate it to text.
+
+Safe path if old bytea values actually contain UTF-8 text:
+
+ALTER TABLE documents
+ALTER COLUMN title TYPE text
+USING convert_from(title, 'UTF8');
+
+If conversion fails because data is not valid text, run a controlled cleanup first (example):
+
+UPDATE documents
+SET title = convert_to(COALESCE(original_filename, 'Untitled'), 'UTF8')
+WHERE title IS NULL;
+
+ALTER TABLE documents
+ALTER COLUMN title TYPE text
+USING convert_from(title, 'UTF8');
+
+5) Restart application after entity/schema alignment and retest move/list.
+
+Temporary workaround (not preferred):
+- remove title filter when q is null/blank before calling findVisibleDocumentsForUserFiltered.
+- but proper fix is correcting title column type.
+
+================================================================
+6) DOCUMENT SERVICE: OWNER/EDITOR/VIEWER AUTHORIZATION
+================================================================
+Inject PermissionManagerRepository into DocumentManageService.
+
+6.1 Add helper:
+
+private String resolveAccessType(DocumentManage doc, Integer userId) {
+    if (doc.getOwner() != null && doc.getOwner().getUserId().equals(userId)) return "Owner";
+    return permissionManagerRepository
+            .findByDocument_DocIdAndUser_UserId(doc.getDocId(), userId)
+            .map(PermissionManager::getAccessType)
+            .orElse(null);
+}
+
+private void requireCanView(DocumentManage doc, Integer userId) {
+    String role = resolveAccessType(doc, userId);
+    if (role == null) throw new IllegalArgumentException("Document not found with id: " + doc.getDocId());
+}
+
+private void requireCanEdit(DocumentManage doc, Integer userId) {
+    String role = resolveAccessType(doc, userId);
+    if (!"Owner".equals(role) && !"Editor".equals(role)) {
+        throw new IllegalArgumentException("You do not have permission to edit this document");
+    }
+}
+
+private void requireIsOwner(DocumentManage doc, Integer userId) {
+    String role = resolveAccessType(doc, userId);
+    if (!"Owner".equals(role)) {
+        throw new IllegalArgumentException("You do not have permission to perform this action");
+    }
+}
+
+6.2 getDocuments/search:
+- Use findVisibleDocumentsForUserFiltered(...) and findVisibleDocumentsForUser(...).
+
+6.3 getDocumentById:
+- load doc then requireCanView(doc, currentUserId).
+
+6.4 updateDocument (rename):
+- requireCanEdit(existing, currentUserId).
+
+6.5 moveDocument:
+- requireIsOwner(doc, currentUserId).
+
+6.6 deleteDocumentById:
+- requireIsOwner(doc, currentUserId) (or allow admin policy explicitly).
+
+6.7 createDocument:
+- keep setOwner(owner).
+- after save, ensure permissions row (doc, owner) = Owner:
+
+permissionManagerRepository.findByDocument_DocIdAndUser_UserId(saved.getDocId(), currentUserId)
+    .ifPresentOrElse(
+        p -> {
+            p.setAccessType("Owner");
+            permissionManagerRepository.save(p);
+        },
+        () -> {
+            PermissionManager p = new PermissionManager();
+            p.setDocument(saved);
+            p.setUser(owner);
+            p.setAccessType("Owner");
+            permissionManagerRepository.save(p);
+        }
+    );
+
+    6.8 Copy-paste method replacements for your current DocumentManageService
+
+    Use these method bodies to implement 6.2, 6.3, 6.4, 6.5, 6.6, 6.7 exactly in your current class shape.
+
+    public List<DocumentManage> getDocuments(Integer currentUserId, Integer folderId, String q) {
+      String keyword = (q == null || q.isBlank()) ? null : q;
+      if (folderId != null || keyword != null) {
+        return documentManageRepository.findVisibleDocumentsForUserFiltered(currentUserId, folderId, keyword);
+      }
+      return documentManageRepository.findVisibleDocumentsForUser(currentUserId);
+    }
+
+    public List<DocumentManage> searchDocuments(Integer currentUserId, String q) {
+      String keyword = (q == null || q.isBlank()) ? null : q;
+      if (keyword == null) {
+        return documentManageRepository.findVisibleDocumentsForUser(currentUserId);
+      }
+      return documentManageRepository.findVisibleDocumentsForUserFiltered(currentUserId, null, keyword);
+    }
+
+    public DocumentManage getDocumentById(Integer id, Integer currentUserId) {
+      DocumentManage doc = documentManageRepository
+          .findById(id)
+          .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+      requireCanView(doc, currentUserId);
+      return doc;
+    }
+
+    public DocumentManage createDocument(MultipartFile file, Integer folderId, String title, Integer currentUserId) {
+      try {
+        UserManager owner = userManagerRepository
+            .findById(currentUserId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + currentUserId));
+
+        DocumentManage document = new DocumentManage();
+        document.setOwner(owner);
+
+        String originalFilename = file.getOriginalFilename();
+        String resolvedTitle = (title != null && !title.isBlank()) ? title : originalFilename;
+        document.setTitle(resolvedTitle != null ? resolvedTitle : "Untitled");
+
+        String extension = "FILE";
+        if (originalFilename != null && originalFilename.contains(".")) {
+          extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toUpperCase();
+        }
+
+        String mime = (file.getContentType() == null || file.getContentType().isBlank())
+            ? "application/octet-stream"
+            : file.getContentType();
+
+        document.setMetadata(Map.of(
+            "extension", extension,
+            "mime_type", mime,
+            "size_bytes", file.getSize()));
+        document.setOriginalFilename(originalFilename);
+        document.setContentType(mime);
+        document.setFileData(file.getBytes());
+
+        if (folderId != null) {
+          FolderManager folder = folderManagerRepository.findById(folderId)
+              .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+          boolean folderOwnedByCurrent = folder.getOwner() != null
+              && folder.getOwner().getUserId().equals(currentUserId);
+          if (!folderOwnedByCurrent) {
+            throw new IllegalArgumentException("You can only upload to your own folders");
+          }
+          document.setFolder(folder);
+        }
+
+        DocumentManage saved = documentManageRepository.save(document);
+
+        permissionManagerRepository.findByDocument_DocIdAndUser_UserId(saved.getDocId(), currentUserId)
+            .ifPresentOrElse(
+                p -> {
+                  p.setAccessType("Owner");
+                  permissionManagerRepository.save(p);
+                },
+                () -> {
+                  PermissionManager p = new PermissionManager();
+                  p.setDocument(saved);
+                  p.setUser(owner);
+                  p.setAccessType("Owner");
+                  permissionManagerRepository.save(p);
+                }
+            );
+
+        return saved;
+      } catch (IOException e) {
+        throw new RuntimeException("Failed to read uploaded file content", e);
+      }
+    }
+
+    public DocumentManage updateDocument(Integer id, DocumentManage updatedDocument, Integer currentUserId) {
+      DocumentManage existing = documentManageRepository
+          .findById(id)
+          .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+
+      requireCanEdit(existing, currentUserId);
+
+      if (updatedDocument.getTitle() != null) {
+        existing.setTitle(updatedDocument.getTitle());
+      }
+      if (updatedDocument.getMetadata() != null) {
+        existing.setMetadata(updatedDocument.getMetadata());
+      }
+
+      if (updatedDocument.getFolder() != null) {
+        requireIsOwner(existing, currentUserId);
+
+        FolderManager target = updatedDocument.getFolder();
+        if (target.getFolderId() == null) {
+          throw new IllegalArgumentException("folder_id is required in folder object");
+        }
+
+        FolderManager realFolder = folderManagerRepository.findById(target.getFolderId())
+            .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + target.getFolderId()));
+
+        boolean folderOwnedByCurrent = realFolder.getOwner() != null
+            && realFolder.getOwner().getUserId().equals(currentUserId);
+        if (!folderOwnedByCurrent) {
+          throw new IllegalArgumentException("You can only move to your own folders");
+        }
+        existing.setFolder(realFolder);
+      }
+
+      return documentManageRepository.save(existing);
+    }
+
+    public DocumentManage moveDocument(Integer id, Integer folderId, Integer currentUserId) {
+      if (folderId == null) {
+        throw new IllegalArgumentException("folder_id is required");
+      }
+
+      DocumentManage doc = documentManageRepository
+          .findById(id)
+          .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+      requireIsOwner(doc, currentUserId);
+
+      FolderManager target = folderManagerRepository
+          .findById(folderId)
+          .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+      boolean folderOwnedByCurrent = target.getOwner() != null
+          && target.getOwner().getUserId().equals(currentUserId);
+      if (!folderOwnedByCurrent) {
+        throw new IllegalArgumentException("You can only move to your own folders");
+      }
+
+      doc.setFolder(target);
+      return documentManageRepository.save(doc);
+    }
+
+    public void deleteDocumentById(Integer id, Integer currentUserId) {
+      DocumentManage existing = documentManageRepository
+          .findById(id)
+          .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+      requireIsOwner(existing, currentUserId);
+      documentManageRepository.delete(existing);
+    }
+
+    Important: this block requires both repository methods from section 5:
+    - findVisibleDocumentsForUser(Integer userId)
+    - findVisibleDocumentsForUserFiltered(Integer userId, Integer folderId, String q)
+
+================================================================
+7) SHARING CONTROLLER: PASS ACTOR USER ID
+================================================================
+Inject AuthService + JwtService similar to Document/Folder controllers.
+
+In endpoints:
+- createSharingRequest -> pass currentUserId to service
+- approveSharingRequest -> pass currentUserId
+- rejectSharingRequest -> pass currentUserId
+- list -> for non-admin use getIncomingRequests(currentUserId, ...)
+
+7.1 Copy-paste controller wiring using your current Auth/JWT shape
+
+Based on your AuthController/AuthService/JwtService, use JwtService directly in SharingRequestManagerController
+to extract actor user id and role from Authorization header.
+
+Replace SharingRequestManagerController with:
+
+package com.saigontechnologyintern.document_management.sharingRequestManagement;
+
+import java.util.List;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import com.saigontechnologyintern.document_management.authManagement.JwtService;
+
+@RestController
+@RequestMapping("/api/v1/sharing-requests")
+@CrossOrigin(origins = "*")
+public class SharingRequestManagerController {
+
+  private final SharingRequestManagerService sharingRequestManagerService;
+  private final JwtService jwtService;
+
+  public SharingRequestManagerController(
+      SharingRequestManagerService sharingRequestManagerService,
+      JwtService jwtService) {
+    this.sharingRequestManagerService = sharingRequestManagerService;
+    this.jwtService = jwtService;
+  }
+
+  @GetMapping
+  public List<SharingRequestResponseDto> getSharingRequests(
+      @RequestHeader("Authorization") String authHeader,
+      @RequestParam(value = "status", required = false) String status,
+      @RequestParam(value = "doc_id", required = false) Integer docId) {
+
+    String token = extractToken(authHeader);
+    Integer currentUserId = jwtService.extractUserId(token);
+    String role = jwtService.extractRole(token);
+
+    List<SharingRequestManager> data;
+    if (role != null && "ADMIN".equalsIgnoreCase(role)) {
+      if (status != null && docId != null) {
+        data = sharingRequestManagerService.getSharingRequestsByStatusAndDocumentId(status, docId);
+      } else if (status != null) {
+        data = sharingRequestManagerService.getSharingRequestsByStatus(status);
+      } else if (docId != null) {
+        data = sharingRequestManagerService.getSharingRequestsByDocumentId(docId);
+      } else {
+        data = sharingRequestManagerService.getAllSharingRequests();
+      }
+    } else {
+      data = sharingRequestManagerService.getIncomingRequests(currentUserId, status, docId);
+    }
+
+    return data.stream().map(sharingRequestManagerService::toDto).toList();
+  }
+
+  @GetMapping("/{id}")
+  public SharingRequestResponseDto getSharingRequestById(@PathVariable Integer id) {
+    return sharingRequestManagerService.toDto(sharingRequestManagerService.getSharingRequestById(id));
+  }
+
+  @PostMapping
+  public SharingRequestResponseDto createSharingRequest(
+      @RequestHeader("Authorization") String authHeader,
+      @RequestBody SharingRequestCreateRequest request) {
+
+    String token = extractToken(authHeader);
+    Integer currentUserId = jwtService.extractUserId(token);
+
+    SharingRequestManager created = sharingRequestManagerService.createSharingRequest(
+        request.getDoc_id(),
+        request.getRequester_id(),
+        request.getPermission(),
+        currentUserId);
+
+    return sharingRequestManagerService.toDto(created);
+  }
+
+  @PostMapping("/{id}/approve")
+  public SharingRequestResponseDto approveSharingRequest(
+      @RequestHeader("Authorization") String authHeader,
+      @PathVariable Integer id) {
+
+    String token = extractToken(authHeader);
+    Integer currentUserId = jwtService.extractUserId(token);
+
+    SharingRequestManager approved = sharingRequestManagerService.approveSharingRequest(id, currentUserId);
+    return sharingRequestManagerService.toDto(approved);
+  }
+
+  @PostMapping("/{id}/reject")
+  public SharingRequestResponseDto rejectSharingRequest(
+      @RequestHeader("Authorization") String authHeader,
+      @PathVariable Integer id) {
+
+    String token = extractToken(authHeader);
+    Integer currentUserId = jwtService.extractUserId(token);
+
+    SharingRequestManager rejected = sharingRequestManagerService.rejectSharingRequest(id, currentUserId);
+    return sharingRequestManagerService.toDto(rejected);
+  }
+
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+  }
+
+  private String extractToken(String authHeader) {
+    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+      throw new IllegalArgumentException("Invalid authorization header");
+    }
+    String token = authHeader.substring(7).trim();
+    if (!jwtService.isTokenValid(token)) {
+      throw new IllegalArgumentException("Invalid or expired token");
+    }
+    return token;
+  }
+
+  public static class SharingRequestCreateRequest {
+    private Integer doc_id;
+    private Integer requester_id;
+    private String permission;
+
+    public Integer getDoc_id() {
+      return doc_id;
+    }
+
+    public void setDoc_id(Integer doc_id) {
+      this.doc_id = doc_id;
+    }
+
+    public Integer getRequester_id() {
+      return requester_id;
+    }
+
+    public void setRequester_id(Integer requester_id) {
+      this.requester_id = requester_id;
+    }
+
+    public String getPermission() {
+      return permission;
+    }
+
+    public void setPermission(String permission) {
+      this.permission = permission;
+    }
+  }
+}
+
+7.2 Notes for your existing frontend payload names
+
+- requester_id in request body is treated as recipient user id (same model used by your current service design).
+- If your frontend already sends recipient_user_id instead, rename the field in SharingRequestCreateRequest and pass that value to createSharingRequest.
+- Admin users can list all sharing requests; non-admin users only see their incoming requests.
+
+================================================================
+8) DOCUMENT DOWNLOAD RULE
+================================================================
+No extra endpoint change required if getDocumentById already enforces view access.
+Viewer can download naturally.
+
+================================================================
+9) SQL CONSTRAINT SAFETY
+================================================================
+Keep title-case values only:
+- sharing_requests.status: Pending/Approved/Rejected
+- sharing_requests.permission: Owner/Editor/Viewer
+- permissions.access_type: Owner/Editor/Viewer
+
+One-time cleanup:
+
+UPDATE sharing_requests
+SET status = CASE
+  WHEN LOWER(status) = 'pending' THEN 'Pending'
+  WHEN LOWER(status) = 'approved' THEN 'Approved'
+  WHEN LOWER(status) = 'rejected' THEN 'Rejected'
+  ELSE 'Pending'
+END;
+
+UPDATE sharing_requests
+SET permission = CASE
+  WHEN LOWER(permission) = 'owner' THEN 'Owner'
+  WHEN LOWER(permission) = 'editor' THEN 'Editor'
+  WHEN LOWER(permission) = 'viewer' THEN 'Viewer'
+  ELSE 'Viewer'
+END;
+
+UPDATE permissions
+SET access_type = CASE
+  WHEN LOWER(access_type) = 'owner' THEN 'Owner'
+  WHEN LOWER(access_type) = 'editor' THEN 'Editor'
+  WHEN LOWER(access_type) = 'viewer' THEN 'Viewer'
+  ELSE 'Viewer'
+END;
+
+================================================================
+10) TEST FLOW
+================================================================
+1. User A uploads doc -> permissions row Owner exists for A.
+2. User A shares to User B as Editor -> sharing row Pending, requester_id = B.
+3. User A cannot approve B request.
+4. User B accepts -> request Approved, permission row (doc,B)=Editor.
+5. User B sees doc in dashboard/list.
+6. User B can rename doc (Editor), cannot move/delete/share.
+7. Share to User C as Viewer -> C can view/download only.

@@ -1,0 +1,229 @@
+APP BUILD MAP: FRONTEND, BACKEND, ENDPOINTS, AND FULL WORKFLOW
+
+Purpose
+- This file lists the directly related files for building the app on frontend and backend sides.
+- It also lists endpoint surfaces and explains the end-to-end app workflow.
+
+============================================================
+1) FRONTEND FILES (DIRECTLY RELATED)
+============================================================
+
+Core app bootstrap and routing
+- src/start.ts
+- src/router.tsx
+- src/routeTree.gen.ts
+- src/routes/__root.tsx
+- src/server.ts
+- src/styles.css
+
+Main feature pages (business flow)
+- src/routes/auth.tsx
+- src/routes/index.tsx
+- src/routes/upload.tsx
+- src/routes/folders.tsx
+- src/routes/documents-id.tsx
+- src/routes/sharing-requests.tsx
+- src/routes/admin.tsx
+
+Core layout + auth hook
+- src/components/app-shell.tsx
+- src/hooks/use-auth.ts
+
+Frontend API layer (talks to backend)
+- src/lib/api/client.ts
+- src/lib/api/index.ts
+- src/lib/api/types.ts
+- src/lib/api/auth.ts
+- src/lib/api/users.ts
+- src/lib/api/folders.ts
+- src/lib/api/documents.ts
+- src/lib/api/permissions.ts
+- src/lib/api/sharing.ts
+
+Document metadata helpers (used in lists/details)
+- src/lib/document-metadata.ts
+
+Optional/local-dev data utilities (mock/offline support)
+- src/lib/mock/db.ts
+- src/lib/mock/install.ts
+- src/lib/mock/seed-data.ts
+
+UI primitive library files (component building blocks)
+- src/components/ui/* (buttons, input, dialog, table, etc.)
+
+============================================================
+2) BACKEND FILES (DIRECTLY RELATED IN THIS WORKSPACE SNAPSHOT)
+============================================================
+
+Note
+- The backend files here are module snapshots/fixed references kept under spring-boot-modules.
+- They are used as your current implementation reference for API behavior.
+
+Auth and security
+- spring-boot-modules/authManagement/AuthController.java
+- spring-boot-modules/authManagement/AuthService.java
+- spring-boot-modules/authManagement/JwtService.java
+- spring-boot-modules/authManagement/JwtAuthenticationFilter.java
+- spring-boot-modules/authManagement/SecurityConfig.java
+- spring-boot-modules/authManagement/LoginRequest.java
+- spring-boot-modules/authManagement/RegisterRequest.java
+- spring-boot-modules/authManagement/AuthResponseDto.java
+- spring-boot-modules/authManagement/UserDto.java
+
+Domain module snapshots
+- spring-boot-modules/documentManagement/DocumentManage_FIXED.java
+- spring-boot-modules/folderManagement/FolderManager_FIXED.java
+- spring-boot-modules/permissionManagement/PermissionManager_FIXED.java
+- spring-boot-modules/sharingRequestManagement/SharingRequestManager_FIXED.java
+- spring-boot-modules/userManagement/UserManager_FIXED.java
+- spring-boot-modules/userManagement/UserManagerRepository.java
+
+Database/seed assets used in backend verification
+- SEED_DATA_POSTGRES.txt
+- DUMMY_DATA_25_ALL_TABLES_POSTGRES.txt
+- RDS_LOCAL_SCHEMA_ADJUSTMENT_GUIDE.txt
+
+============================================================
+3) ENDPOINTS (API SURFACE)
+============================================================
+
+Source of truth in workspace
+- endpoint-list.txt
+
+Auth
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+- POST /api/v1/auth/logout
+- POST /api/v1/auth/password/forgot
+- POST /api/v1/auth/password/reset
+- GET  /api/v1/auth/me
+
+Users
+- GET    /api/v1/users
+- GET    /api/v1/users/{id}
+- PATCH  /api/v1/users/{id}/role
+- DELETE /api/v1/users/{id}
+- GET    /api/v1/users/audit/export
+
+Folders
+- GET    /api/v1/folders
+- GET    /api/v1/folders/{id}
+- POST   /api/v1/folders
+- PATCH  /api/v1/folders/{id}
+- DELETE /api/v1/folders/{id}
+
+Documents
+- GET    /api/v1/documents
+- GET    /api/v1/documents/search
+- GET    /api/v1/documents/{id}
+- POST   /api/v1/documents
+- PATCH  /api/v1/documents/{id}
+- PATCH  /api/v1/documents/{id}/move
+- DELETE /api/v1/documents/{id}
+- GET    /api/v1/documents/{id}/download
+- GET    /api/v1/documents/{id}/audit
+
+Permissions
+- GET    /api/v1/permissions
+- POST   /api/v1/permissions
+- PATCH  /api/v1/permissions/{id}
+- DELETE /api/v1/permissions/{id}
+
+Sharing Requests
+- GET    /api/v1/sharing-requests
+- POST   /api/v1/sharing-requests
+- POST   /api/v1/sharing-requests/{id}/approve
+- POST   /api/v1/sharing-requests/{id}/reject
+
+Legacy compatibility
+- GET    /api/v1/document-manager
+- GET    /api/v1/document-manager/{id}
+- POST   /api/v1/document-manager
+- PUT    /api/v1/document-manager/{id}
+- DELETE /api/v1/document-manager/{id}
+
+============================================================
+4) FULL APP WORKFLOW (END-TO-END)
+============================================================
+
+A) Authentication flow
+1. User opens auth page: src/routes/auth.tsx.
+2. Frontend calls authApi.login/register in src/lib/api/auth.ts.
+3. Token is stored via setAuthToken in src/lib/api/client.ts.
+4. use-auth hook loads current user via /auth/me and protects private routes.
+
+B) Dashboard listing flow
+1. Dashboard page src/routes/index.tsx loads documents list.
+2. Frontend calls documentsApi.list from src/lib/api/documents.ts.
+3. Table renders title, type, size, owner, and updated date.
+4. Client-side filters are applied on frontend only:
+   - file type category filter
+   - newest-to-oldest or oldest-to-newest sort
+
+C) Upload flow
+1. Upload page src/routes/upload.tsx accepts file + optional folder.
+2. Frontend builds multipart payload in documentsApi.upload.
+3. Backend stores file_data/content_type/metadata and returns document.
+4. Frontend invalidates documents queries and list refreshes.
+
+D) Folder management flow
+1. Folders page src/routes/folders.tsx loads folders and documents.
+2. Create/rename/delete folder uses foldersApi create/patch/delete.
+3. Move document uses documentsApi.move(docId, folder_id).
+4. Same frontend-side filtering/sorting is applied in folder document pane.
+
+E) Document details + permissions flow
+1. Detail page src/routes/documents-id.tsx loads one document.
+2. Reads current ACL via permissionsApi.listForDocument.
+3. Owner/admin can grant/update/revoke access using permissionsApi.
+4. Audit log loads via documentsApi.auditLog.
+
+F) Sharing request flow
+1. User submits sharing request via sharingApi.request.
+2. Backend stores request with permission + status.
+3. Recipient view in src/routes/sharing-requests.tsx shows incoming requests.
+4. Recipient approves/rejects via sharingApi.approve/reject.
+5. Backend updates status and (on approve) permission record.
+
+G) Admin operations flow
+1. Admin page src/routes/admin.tsx uses usersApi and management actions.
+2. Admin can review user state and sharing log visibility.
+3. Admin-level endpoints enforce privileged actions.
+
+H) Data and schema workflow
+1. Seed data files populate users/folders/documents/permissions/sharing_requests.
+2. FK order must be parent first: users -> folders/documents -> permissions/sharing_requests.
+3. RDS schema must match local defaults/constraints for stable insert behavior.
+
+============================================================
+5) QUICK NAVIGATION CHECKLIST
+============================================================
+
+If you need to change login/auth only
+- src/routes/auth.tsx
+- src/hooks/use-auth.ts
+- src/lib/api/auth.ts
+- spring-boot-modules/authManagement/*
+
+If you need to change document list behavior (filters/sort/owner)
+- src/routes/index.tsx
+- src/lib/api/documents.ts
+- src/lib/document-metadata.ts
+
+If you need to change folder behavior
+- src/routes/folders.tsx
+- src/lib/api/folders.ts
+- src/lib/api/documents.ts
+
+If you need to change sharing request behavior
+- src/routes/sharing-requests.tsx
+- src/lib/api/sharing.ts
+- spring-boot-modules/sharingRequestManagement/SharingRequestManager_FIXED.java
+- spring-boot-modules/permissionManagement/PermissionManager_FIXED.java
+
+If you need to change permission enforcement
+- src/lib/api/permissions.ts
+- src/routes/documents-id.tsx
+- spring-boot-modules/permissionManagement/PermissionManager_FIXED.java
+
+End of file.

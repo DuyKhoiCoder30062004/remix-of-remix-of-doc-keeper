@@ -1,0 +1,8 @@
+# CHANGED: required by JwtService for signing and validating access tokens.
+# Use a strong Base64-encoded secret with at least 32 raw bytes.
+app.jwt.secret=VGhpc0lzQVN0cm9uZ0Rldk9ubHlCYXNlNjRTZWNyZXRLZXlGb3JKV1QxMjM0NTY3ODkw
+app.jwt.expiration-ms=86400000
+
+# Optional but recommended so the frontend gets snake_case fields.
+spring.jackson.property-naming-strategy=SNAKE_CASE
+spring.jackson.serialization.write-dates-as-timestamps=false

@@ -1,0 +1,149 @@
+-- DUMMY DATA: 25 ROWS PER TABLE
+-- Tables covered: users, folders, documents, permissions, sharing_requests
+
+BEGIN;
+TRUNCATE TABLE sharing_requests, permissions, documents, folders, users RESTART IDENTITY CASCADE;
+
+INSERT INTO users (name, email, password, role) VALUES
+  ('User 001', 'user001@firm.com', 'pass001', 'Admin'),
+  ('User 002', 'user002@firm.com', 'pass002', 'Admin'),
+  ('User 003', 'user003@firm.com', 'pass003', 'Admin'),
+  ('User 004', 'user004@firm.com', 'pass004', 'Admin'),
+  ('User 005', 'user005@firm.com', 'pass005', 'Admin'),
+  ('User 006', 'user006@firm.com', 'pass006', 'User'),
+  ('User 007', 'user007@firm.com', 'pass007', 'User'),
+  ('User 008', 'user008@firm.com', 'pass008', 'User'),
+  ('User 009', 'user009@firm.com', 'pass009', 'User'),
+  ('User 010', 'user010@firm.com', 'pass010', 'User'),
+  ('User 011', 'user011@firm.com', 'pass011', 'User'),
+  ('User 012', 'user012@firm.com', 'pass012', 'User'),
+  ('User 013', 'user013@firm.com', 'pass013', 'User'),
+  ('User 014', 'user014@firm.com', 'pass014', 'User'),
+  ('User 015', 'user015@firm.com', 'pass015', 'User'),
+  ('User 016', 'user016@firm.com', 'pass016', 'User'),
+  ('User 017', 'user017@firm.com', 'pass017', 'User'),
+  ('User 018', 'user018@firm.com', 'pass018', 'User'),
+  ('User 019', 'user019@firm.com', 'pass019', 'User'),
+  ('User 020', 'user020@firm.com', 'pass020', 'User'),
+  ('User 021', 'user021@firm.com', 'pass021', 'User'),
+  ('User 022', 'user022@firm.com', 'pass022', 'User'),
+  ('User 023', 'user023@firm.com', 'pass023', 'User'),
+  ('User 024', 'user024@firm.com', 'pass024', 'User'),
+  ('User 025', 'user025@firm.com', 'pass025', 'User');
+
+INSERT INTO folders (name, owner_id) VALUES
+  ('Folder 001', 1),
+  ('Folder 002', 2),
+  ('Folder 003', 3),
+  ('Folder 004', 4),
+  ('Folder 005', 5),
+  ('Folder 006', 6),
+  ('Folder 007', 7),
+  ('Folder 008', 8),
+  ('Folder 009', 9),
+  ('Folder 010', 10),
+  ('Folder 011', 11),
+  ('Folder 012', 12),
+  ('Folder 013', 13),
+  ('Folder 014', 14),
+  ('Folder 015', 15),
+  ('Folder 016', 16),
+  ('Folder 017', 17),
+  ('Folder 018', 18),
+  ('Folder 019', 19),
+  ('Folder 020', 20),
+  ('Folder 021', 21),
+  ('Folder 022', 22),
+  ('Folder 023', 23),
+  ('Folder 024', 24),
+  ('Folder 025', 25);
+
+INSERT INTO documents (title, owner_id, metadata, folder_id, original_filename, content_type, file_data) VALUES
+  ('Document 001.pdf', 1, '{"mime_type":"application/pdf","size_bytes":101001,"extension":"PDF"}'::jsonb, 1, 'Document 001.pdf', 'application/pdf', convert_to('Seeded content for Document 001', 'UTF8')),
+  ('Document 002.pdf', 2, '{"mime_type":"application/pdf","size_bytes":101002,"extension":"PDF"}'::jsonb, 2, 'Document 002.pdf', 'application/pdf', convert_to('Seeded content for Document 002', 'UTF8')),
+  ('Document 003.pdf', 3, '{"mime_type":"application/pdf","size_bytes":101003,"extension":"PDF"}'::jsonb, 3, 'Document 003.pdf', 'application/pdf', convert_to('Seeded content for Document 003', 'UTF8')),
+  ('Document 004.pdf', 4, '{"mime_type":"application/pdf","size_bytes":101004,"extension":"PDF"}'::jsonb, 4, 'Document 004.pdf', 'application/pdf', convert_to('Seeded content for Document 004', 'UTF8')),
+  ('Document 005.pdf', 5, '{"mime_type":"application/pdf","size_bytes":101005,"extension":"PDF"}'::jsonb, 5, 'Document 005.pdf', 'application/pdf', convert_to('Seeded content for Document 005', 'UTF8')),
+  ('Document 006.pdf', 6, '{"mime_type":"application/pdf","size_bytes":101006,"extension":"PDF"}'::jsonb, 6, 'Document 006.pdf', 'application/pdf', convert_to('Seeded content for Document 006', 'UTF8')),
+  ('Document 007.pdf', 7, '{"mime_type":"application/pdf","size_bytes":101007,"extension":"PDF"}'::jsonb, 7, 'Document 007.pdf', 'application/pdf', convert_to('Seeded content for Document 007', 'UTF8')),
+  ('Document 008.pdf', 8, '{"mime_type":"application/pdf","size_bytes":101008,"extension":"PDF"}'::jsonb, 8, 'Document 008.pdf', 'application/pdf', convert_to('Seeded content for Document 008', 'UTF8')),
+  ('Document 009.pdf', 9, '{"mime_type":"application/pdf","size_bytes":101009,"extension":"PDF"}'::jsonb, 9, 'Document 009.pdf', 'application/pdf', convert_to('Seeded content for Document 009', 'UTF8')),
+  ('Document 010.pdf', 10, '{"mime_type":"application/pdf","size_bytes":101010,"extension":"PDF"}'::jsonb, 10, 'Document 010.pdf', 'application/pdf', convert_to('Seeded content for Document 010', 'UTF8')),
+  ('Document 011.pdf', 11, '{"mime_type":"application/pdf","size_bytes":101011,"extension":"PDF"}'::jsonb, 11, 'Document 011.pdf', 'application/pdf', convert_to('Seeded content for Document 011', 'UTF8')),
+  ('Document 012.pdf', 12, '{"mime_type":"application/pdf","size_bytes":101012,"extension":"PDF"}'::jsonb, 12, 'Document 012.pdf', 'application/pdf', convert_to('Seeded content for Document 012', 'UTF8')),
+  ('Document 013.pdf', 13, '{"mime_type":"application/pdf","size_bytes":101013,"extension":"PDF"}'::jsonb, 13, 'Document 013.pdf', 'application/pdf', convert_to('Seeded content for Document 013', 'UTF8')),
+  ('Document 014.pdf', 14, '{"mime_type":"application/pdf","size_bytes":101014,"extension":"PDF"}'::jsonb, 14, 'Document 014.pdf', 'application/pdf', convert_to('Seeded content for Document 014', 'UTF8')),
+  ('Document 015.pdf', 15, '{"mime_type":"application/pdf","size_bytes":101015,"extension":"PDF"}'::jsonb, 15, 'Document 015.pdf', 'application/pdf', convert_to('Seeded content for Document 015', 'UTF8')),
+  ('Document 016.pdf', 16, '{"mime_type":"application/pdf","size_bytes":101016,"extension":"PDF"}'::jsonb, 16, 'Document 016.pdf', 'application/pdf', convert_to('Seeded content for Document 016', 'UTF8')),
+  ('Document 017.pdf', 17, '{"mime_type":"application/pdf","size_bytes":101017,"extension":"PDF"}'::jsonb, 17, 'Document 017.pdf', 'application/pdf', convert_to('Seeded content for Document 017', 'UTF8')),
+  ('Document 018.pdf', 18, '{"mime_type":"application/pdf","size_bytes":101018,"extension":"PDF"}'::jsonb, 18, 'Document 018.pdf', 'application/pdf', convert_to('Seeded content for Document 018', 'UTF8')),
+  ('Document 019.pdf', 19, '{"mime_type":"application/pdf","size_bytes":101019,"extension":"PDF"}'::jsonb, 19, 'Document 019.pdf', 'application/pdf', convert_to('Seeded content for Document 019', 'UTF8')),
+  ('Document 020.pdf', 20, '{"mime_type":"application/pdf","size_bytes":101020,"extension":"PDF"}'::jsonb, 20, 'Document 020.pdf', 'application/pdf', convert_to('Seeded content for Document 020', 'UTF8')),
+  ('Document 021.pdf', 21, '{"mime_type":"application/pdf","size_bytes":101021,"extension":"PDF"}'::jsonb, 21, 'Document 021.pdf', 'application/pdf', convert_to('Seeded content for Document 021', 'UTF8')),
+  ('Document 022.pdf', 22, '{"mime_type":"application/pdf","size_bytes":101022,"extension":"PDF"}'::jsonb, 22, 'Document 022.pdf', 'application/pdf', convert_to('Seeded content for Document 022', 'UTF8')),
+  ('Document 023.pdf', 23, '{"mime_type":"application/pdf","size_bytes":101023,"extension":"PDF"}'::jsonb, 23, 'Document 023.pdf', 'application/pdf', convert_to('Seeded content for Document 023', 'UTF8')),
+  ('Document 024.pdf', 24, '{"mime_type":"application/pdf","size_bytes":101024,"extension":"PDF"}'::jsonb, 24, 'Document 024.pdf', 'application/pdf', convert_to('Seeded content for Document 024', 'UTF8')),
+  ('Document 025.pdf', 25, '{"mime_type":"application/pdf","size_bytes":101025,"extension":"PDF"}'::jsonb, 25, 'Document 025.pdf', 'application/pdf', convert_to('Seeded content for Document 025', 'UTF8'));
+
+INSERT INTO permissions (doc_id, user_id, access_type) VALUES
+  (1, 1, 'Owner'),
+  (2, 2, 'Editor'),
+  (3, 3, 'Viewer'),
+  (4, 4, 'Owner'),
+  (5, 5, 'Editor'),
+  (6, 6, 'Viewer'),
+  (7, 7, 'Owner'),
+  (8, 8, 'Editor'),
+  (9, 9, 'Viewer'),
+  (10, 10, 'Owner'),
+  (11, 11, 'Editor'),
+  (12, 12, 'Viewer'),
+  (13, 13, 'Owner'),
+  (14, 14, 'Editor'),
+  (15, 15, 'Viewer'),
+  (16, 16, 'Owner'),
+  (17, 17, 'Editor'),
+  (18, 18, 'Viewer'),
+  (19, 19, 'Owner'),
+  (20, 20, 'Editor'),
+  (21, 21, 'Viewer'),
+  (22, 22, 'Owner'),
+  (23, 23, 'Editor'),
+  (24, 24, 'Viewer'),
+  (25, 25, 'Owner');
+
+INSERT INTO sharing_requests (doc_id, requester_id, permission, status, requested_at) VALUES
+  (1, 2, 'Editor', 'Pending', NOW() - INTERVAL '25 minutes'),
+  (2, 3, 'Viewer', 'Approved', NOW() - INTERVAL '24 minutes'),
+  (3, 4, 'Editor', 'Rejected', NOW() - INTERVAL '23 minutes'),
+  (4, 5, 'Viewer', 'Pending', NOW() - INTERVAL '22 minutes'),
+  (5, 6, 'Editor', 'Approved', NOW() - INTERVAL '21 minutes'),
+  (6, 7, 'Viewer', 'Rejected', NOW() - INTERVAL '20 minutes'),
+  (7, 8, 'Editor', 'Pending', NOW() - INTERVAL '19 minutes'),
+  (8, 9, 'Viewer', 'Approved', NOW() - INTERVAL '18 minutes'),
+  (9, 10, 'Editor', 'Rejected', NOW() - INTERVAL '17 minutes'),
+  (10, 11, 'Viewer', 'Pending', NOW() - INTERVAL '16 minutes'),
+  (11, 12, 'Editor', 'Approved', NOW() - INTERVAL '15 minutes'),
+  (12, 13, 'Viewer', 'Rejected', NOW() - INTERVAL '14 minutes'),
+  (13, 14, 'Editor', 'Pending', NOW() - INTERVAL '13 minutes'),
+  (14, 15, 'Viewer', 'Approved', NOW() - INTERVAL '12 minutes'),
+  (15, 16, 'Editor', 'Rejected', NOW() - INTERVAL '11 minutes'),
+  (16, 17, 'Viewer', 'Pending', NOW() - INTERVAL '10 minutes'),
+  (17, 18, 'Editor', 'Approved', NOW() - INTERVAL '9 minutes'),
+  (18, 19, 'Viewer', 'Rejected', NOW() - INTERVAL '8 minutes'),
+  (19, 20, 'Editor', 'Pending', NOW() - INTERVAL '7 minutes'),
+  (20, 21, 'Viewer', 'Approved', NOW() - INTERVAL '6 minutes'),
+  (21, 22, 'Editor', 'Rejected', NOW() - INTERVAL '5 minutes'),
+  (22, 23, 'Viewer', 'Pending', NOW() - INTERVAL '4 minutes'),
+  (23, 24, 'Editor', 'Approved', NOW() - INTERVAL '3 minutes'),
+  (24, 25, 'Viewer', 'Rejected', NOW() - INTERVAL '2 minutes'),
+  (25, 1, 'Editor', 'Pending', NOW() - INTERVAL '1 minute');
+
+COMMIT;
+
+-- CHECKS
+-- SELECT COUNT(*) FROM users;
+-- SELECT COUNT(*) FROM folders;
+-- SELECT COUNT(*) FROM documents;
+-- SELECT COUNT(*) FROM permissions;
+-- SELECT COUNT(*) FROM sharing_requests;

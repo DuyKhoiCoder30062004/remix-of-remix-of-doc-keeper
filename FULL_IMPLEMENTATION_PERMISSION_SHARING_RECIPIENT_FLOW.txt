@@ -1,0 +1,190 @@
+FULL IMPLEMENTATION - PERMISSION + SHARING (RECIPIENT ACCEPT FLOW)
+
+This is the backend completion plan for your exact requirement:
+- Owner shares a document to another user.
+- Only recipient account can accept/reject that share.
+- Accepted share creates/updates permissions row.
+- Shared docs appear in recipient dashboard/list.
+- Owner gets Owner permission on upload.
+- Editor can rename.
+- Viewer can view + download only.
+
+================================================================
+1) CURRENT MODEL INTERPRETATION (NO DB SCHEMA CHANGE REQUIRED)
+================================================================
+Your sharing_requests table has requester_id but no recipient_id.
+To satisfy your required flow without migration:
+- Treat requester_id as recipient user id (the user being invited).
+
+In createSharingRequest(docId, user_id, permission):
+- user_id from request body = recipient user id.
+- set entity.requester = recipient user.
+
+This aligns with your frontend share dialog where owner picks target user.
+
+================================================================
+2) STATUS + ACCESS TYPE MUST BE TITLE-CASE
+================================================================
+Because your DB constraints are title-case, all service writes must use:
+- status: Pending, Approved, Rejected
+- access_type: Owner, Editor, Viewer
+
+================================================================
+3) SHARING REQUEST RULES (SERVICE)
+================================================================
+In SharingRequestManagerService:
+
+A) createSharingRequest
+- Validate document exists.
+- Validate recipient user exists.
+- Validate current actor is owner of document (or admin if you allow).
+- Save request with status = "Pending".
+- Store requested permission in memory model if no DB column exists:
+  - If you do not have permission column in sharing_requests, keep DTO fallback.
+
+B) approveSharingRequest
+- Load request.
+- Validate current actor userId == request.requester.userId (recipient-only accept).
+- Set status = "Approved".
+- Upsert permission row for (doc_id, recipient_id):
+  - If exists: update access_type to requested value.
+  - Else: insert new permission.
+
+C) rejectSharingRequest
+- Validate current actor userId == request.requester.userId.
+- Set status = "Rejected".
+
+D) list endpoints
+- Add method to list incoming requests for current user:
+  findByRequester_UserIdAndStatus(userId, "Pending")
+- Return only recipient’s own pending items in recipient view.
+
+================================================================
+4) PERMISSION RULES (SERVICE)
+================================================================
+In PermissionManagerService normalize to title-case:
+- Owner / Editor / Viewer
+
+Business behavior:
+- Owner: full on own doc (rename, move, share, delete)
+- Editor: rename only (no move, no share, no delete)
+- Viewer: view + download only
+
+Add helper in document service:
+- resolveAccess(userId, doc):
+  - if doc.owner.userId == userId => Owner
+  - else check permissions table for doc/user and return access_type
+  - else no access
+
+================================================================
+5) DOCUMENT LIST/DASHBOARD VISIBILITY
+================================================================
+Current issue: recipients cannot see shared docs if list query only filters by owner.
+
+Add repository methods in DocumentManageRepository:
+
+@Query("""
+SELECT DISTINCT d
+FROM DocumentManage d
+LEFT JOIN PermissionManager p ON p.document = d
+WHERE d.owner.userId = :userId
+   OR (p.user.userId = :userId AND p.accessType IN ('Viewer','Editor','Owner'))
+""")
+List<DocumentManage> findVisibleDocumentsForUser(Integer userId);
+
+@Query("""
+SELECT DISTINCT d
+FROM DocumentManage d
+LEFT JOIN PermissionManager p ON p.document = d
+WHERE (d.owner.userId = :userId OR (p.user.userId = :userId AND p.accessType IN ('Viewer','Editor','Owner')))
+  AND (:folderId IS NULL OR d.folder.folderId = :folderId)
+  AND (:q IS NULL OR LOWER(d.title) LIKE LOWER(CONCAT('%', :q, '%')))
+""")
+List<DocumentManage> findVisibleDocumentsForUserFiltered(Integer userId, Integer folderId, String q);
+
+Use these methods in getDocuments/search.
+
+================================================================
+6) DOCUMENT ACTION AUTHORIZATION
+================================================================
+In DocumentManageService:
+
+A) getDocumentById
+- Allow owner OR permission-based access (Viewer/Editor/Owner).
+
+B) rename/update title
+- Allow Owner and Editor only.
+
+C) move document
+- Allow Owner only.
+
+D) delete
+- Allow Owner (and admin if your policy allows).
+
+E) download
+- Allow Viewer, Editor, Owner.
+
+================================================================
+7) OWNER PERMISSION ON UPLOAD
+================================================================
+In createDocument(...):
+- set document owner = current user.
+- after save, ensure permission row exists for owner:
+  access_type = "Owner"
+
+Prefer unique constraint to prevent duplicates:
+- UNIQUE(doc_id, user_id) on permissions.
+
+If duplicate exists, update existing to Owner.
+
+================================================================
+8) CONTROLLER AUTH CONTEXT
+================================================================
+Use your existing pattern:
+- extract token from Authorization header
+- authService.getCurrentUser(token)
+- pass currentUserId to sharing/document service methods
+
+Enforce recipient-only approve/reject in service layer (not frontend only).
+
+================================================================
+9) SQL HELPERS
+================================================================
+Normalize existing values:
+
+UPDATE sharing_requests
+SET status = CASE
+  WHEN LOWER(status) = 'pending' THEN 'Pending'
+  WHEN LOWER(status) = 'approved' THEN 'Approved'
+  WHEN LOWER(status) = 'rejected' THEN 'Rejected'
+  ELSE 'Pending'
+END;
+
+UPDATE permissions
+SET access_type = CASE
+  WHEN LOWER(access_type) = 'owner' THEN 'Owner'
+  WHEN LOWER(access_type) = 'editor' THEN 'Editor'
+  WHEN LOWER(access_type) = 'viewer' THEN 'Viewer'
+  ELSE 'Viewer'
+END;
+
+Optional uniqueness:
+CREATE UNIQUE INDEX IF NOT EXISTS ux_permissions_doc_user
+ON permissions(doc_id, user_id);
+
+================================================================
+10) VERIFY END-TO-END
+================================================================
+1. User A uploads doc.
+   - permissions has Owner row for user A.
+2. User A shares doc to user B with Editor.
+   - sharing_requests row status Pending, requester_id=userB.
+3. User B logs in.
+   - sees pending request.
+   - user A cannot accept user B request.
+4. User B accepts.
+   - request becomes Approved.
+   - permissions row for (doc,userB)=Editor.
+5. User B sees shared doc in dashboard/list.
+6. User B can rename but cannot move/delete/share.
+7. Repeat with Viewer and verify view/download only.

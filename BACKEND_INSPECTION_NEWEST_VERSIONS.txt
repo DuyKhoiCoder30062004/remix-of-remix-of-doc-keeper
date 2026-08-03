@@ -1,0 +1,115 @@
+BACKEND INSPECTION - NEWEST VERSIONS
+
+This file records the newest versions you pasted and the current inspection result for the folder/move visibility issue.
+
+================================================================
+1) ENTITIES PRESENT
+================================================================
+
+1. DocumentManage
+- present
+- fields: docId, title, metadata, createdAt, updatedAt, fileData, originalFilename, contentType, owner, folder, permissions, sharingRequests
+
+2. FolderManager
+- present
+- fields: folderId, name, createdAt, owner, documents
+
+3. PermissionManager
+- present
+- fields: permId, accessType, document, user
+
+4. SharingRequestManager
+- present
+- fields: requestId, status, requestedAt, permission, document, requester
+
+5. UserManager
+- present
+- fields: userId, name, email, password, role, createdAt, documents, folders, permissions, sharingRequests
+
+No entity classes are missing in the snapshot you provided.
+
+================================================================
+2) DOCUMENT FLOW CHECK
+================================================================
+
+Observed frontend behavior:
+- folder page calls GET /api/v1/documents?folder_id=<selected>
+- move dialog calls PATCH /api/v1/documents/{id}/move
+- after move, frontend invalidates documents queries
+
+Observed backend behavior in newest code:
+- DocumentManageController passes current user id into DocumentManageService
+- DocumentManageService.getDocuments(...) uses findVisibleDocumentsForUserFiltered(...) when folderId or q is present
+- moveDocument(...) sets folder and saves document
+
+Inspection result:
+- the move + folder-click flow is wired correctly at a high level
+- if the moved file still does not appear, the most likely remaining issue is the repository query or data returned by /documents
+
+================================================================
+3) CONCRETE ISSUE FOUND
+================================================================
+
+The current DocumentManageRepository query has a broken q predicate:
+
+@org.springframework.data.jpa.repository.Query("""
+SELECT DISTINCT d
+FROM DocumentManage d
+LEFT JOIN PermissionManager p ON p.document = d
+WHERE (d.owner.userId = :userId OR (p.user.userId = :userId AND p.accessType IN ('Owner','Editor','Viewer')))
+  AND (:folderId IS NULL OR d.folder.folderId = :folderId)
+  AND (:q LIKE LOWER(CONCAT('%', :q, '%')))
+""")
+
+Problem:
+- the last clause compares the q parameter to itself
+- it does not filter on d.title
+- it is logically wrong even if it may not throw immediately
+
+Correct form:
+
+AND (:q IS NULL OR LOWER(d.title) LIKE LOWER(CONCAT('%', :q, '%')))
+
+That is the correct title-search condition.
+
+================================================================
+4) WHY THE MOVED FILE MAY STILL NOT APPEAR
+================================================================
+
+The folder view depends on the result of:
+- DocumentManageService.getDocuments(currentUserId, folderId, q)
+- DocumentManageRepository.findVisibleDocumentsForUserFiltered(...)
+
+If the repository query is wrong, the folder page will look empty even after a successful move.
+
+The other path that must be correct is the persistence of folder_id during move:
+- DocumentManage.moveDocument(...)
+- existing.setFolder(realFolder)
+- documentManageRepository.save(doc)
+
+Your newest service code does persist the folder change, so the remaining suspect is the repository query or stale backend build.
+
+================================================================
+5) SECONDARY CHECKS
+================================================================
+
+Check these if the folder still appears empty after fixing the query:
+
+1. Confirm the API response for a moved document shows folder_id set to the target folder.
+2. Confirm the backend app is actually running the newest compiled code, not an older build.
+3. Confirm the frontend folder page is using the selected folder id from the API response.
+4. Confirm the documents table row was updated in the same database the app is connected to.
+
+================================================================
+6) SUMMARY
+================================================================
+
+What is present:
+- all core entities are present
+- document, folder, permission, sharing, and user models exist
+
+What is wrong in the newest pasted backend code:
+- DocumentManageRepository.findVisibleDocumentsForUserFiltered has a malformed q predicate
+
+What is most likely causing the folder to look empty:
+- backend query mismatch or stale build, not a missing entity

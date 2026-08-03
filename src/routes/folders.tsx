@@ -11,6 +11,9 @@ import {
   type DocumentMeta,
 } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { parseDocumentMetadata } from "@/lib/document-metadata";
+
+type SortOrder = "newest" | "oldest";
 
 export const Route = createFileRoute("/folders")({
   component: FoldersPage,
@@ -27,6 +30,8 @@ function FoldersPage() {
   const [newName, setNewName] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [moveDoc, setMoveDoc] = useState<DocumentMeta | null>(null);
+  const [fileTypeFilter, setFileTypeFilter] = useState("ALL");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -87,10 +92,23 @@ function FoldersPage() {
     [folders, q],
   );
 
+  const availableFileTypes = useMemo(
+    () => Array.from(new Set(docs.map((d) => getDocumentFileType(d)))).sort(),
+    [docs],
+  );
+
   const visibleDocs = useMemo(() => {
-    if (selectedFolderId) return docs;
-    return docs;
-  }, [docs, selectedFolderId]);
+    const filtered = docs.filter((doc) =>
+      fileTypeFilter === "ALL" ? true : getDocumentFileType(doc) === fileTypeFilter,
+    );
+
+    filtered.sort((a, b) => {
+      const diff = getDocumentUpdatedAtMs(b) - getDocumentUpdatedAtMs(a);
+      return sortOrder === "newest" ? diff : -diff;
+    });
+
+    return filtered;
+  }, [docs, fileTypeFilter, sortOrder]);
 
   return (
     <AppShell
@@ -149,13 +167,13 @@ function FoldersPage() {
               <FolderRow
                 key={f.folder_id}
                 folder={f}
-                active={selectedFolderId === f.folder_id}
-                onSelect={() => setSelectedFolderId(f.folder_id)}
+                active={selectedFolderId === String(f.folder_id)}
+                onSelect={() => setSelectedFolderId(String(f.folder_id))}
                 canManage={canManageFolders}
-                onRename={(name) => renameFolder.mutate({ id: f.folder_id, name })}
+                onRename={(name) => renameFolder.mutate({ id: String(f.folder_id), name })}
                 onDelete={() => {
                   if (confirm(`Delete folder "${f.name}"? Documents inside will become unfiled.`)) {
-                    deleteFolder.mutate(f.folder_id);
+                    deleteFolder.mutate(String(f.folder_id));
                   }
                 }}
               />
@@ -169,11 +187,36 @@ function FoldersPage() {
           <div className="md:col-span-2 bg-background ring-1 ring-border rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-border text-xs uppercase tracking-wide text-muted-foreground font-semibold">
               {selectedFolderId
-                ? folders.find((f) => f.folder_id === selectedFolderId)?.name ?? "Folder"
+                ? folders.find((f) => String(f.folder_id) === selectedFolderId)?.name ?? "Folder"
                 : isAdmin ? "All documents" : "My documents"}
               <span className="ml-2 normal-case text-muted-foreground/70">
                 ({visibleDocs.length})
               </span>
+            </div>
+            <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-3">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">File type</label>
+              <select
+                value={fileTypeFilter}
+                onChange={(e) => setFileTypeFilter(e.target.value)}
+                className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs"
+              >
+                <option value="ALL">All types</option>
+                {availableFileTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sort</label>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs"
+              >
+                <option value="newest">Newest to oldest</option>
+                <option value="oldest">Oldest to newest</option>
+              </select>
             </div>
             <ul className="divide-y divide-border">
               {visibleDocs.map((d) => (
@@ -216,7 +259,7 @@ function FoldersPage() {
           doc={moveDoc}
           folders={folders}
           onCancel={() => setMoveDoc(null)}
-          onMove={(folder_id) => moveDocument.mutate({ docId: moveDoc.doc_id, folder_id })}
+          onMove={(folder_id) => moveDocument.mutate({ docId: String(moveDoc.doc_id), folder_id })}
           pending={moveDocument.isPending}
         />
       )}
@@ -305,7 +348,9 @@ function MoveDialog({
   onMove: (folder_id: string | null) => void;
   pending: boolean;
 }) {
-  const [target, setTarget] = useState<string | null>(doc.folder_id);
+  const [target, setTarget] = useState<string | null>(
+    doc.folder_id == null ? null : String(doc.folder_id),
+  );
 
   return (
     <div className="fixed inset-0 bg-black/40 grid place-items-center z-50">
@@ -335,8 +380,8 @@ function MoveDialog({
             >
               <input
                 type="radio"
-                checked={target === f.folder_id}
-                onChange={() => setTarget(f.folder_id)}
+                checked={target === String(f.folder_id)}
+                onChange={() => setTarget(String(f.folder_id))}
               />
               <FolderIcon className="size-4 text-muted-foreground" />
               <span className="text-sm">{f.name}</span>
@@ -361,4 +406,25 @@ function MoveDialog({
       </div>
     </div>
   );
+}
+
+function getDocumentFileType(doc: DocumentMeta): string {
+  const meta = parseDocumentMetadata(doc.metadata);
+  const metaExt = typeof meta.extension === "string" ? meta.extension : "";
+  if (metaExt) return metaExt.toUpperCase();
+  const titleExt = doc.title.split(".").pop();
+  return titleExt ? titleExt.toUpperCase() : "UNKNOWN";
+}
+
+function getDocumentUpdatedAtMs(doc: DocumentMeta): number {
+  const val = doc.updatedAt ?? doc.updated_at ?? doc.createdAt ?? doc.created_at;
+  if (!val) return 0;
+
+  if (Array.isArray(val)) {
+    const [y, mo, d, h = 0, mi = 0, s = 0] = val as number[];
+    return new Date(y, mo - 1, d, h, mi, s).getTime();
+  }
+
+  const parsed = new Date(val as string).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
 }

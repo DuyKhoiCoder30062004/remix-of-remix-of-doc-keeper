@@ -1,0 +1,300 @@
+RDS VS LOCAL SCHEMA ADJUSTMENT GUIDE
+
+This file is based on your current LOCAL PostgreSQL schema snapshot.
+Use it to align your RDS schema and seed data so both environments behave the same.
+
+================================================================
+1) LOCAL SCHEMA SNAPSHOT
+================================================================
+
+Your local database currently has these table shapes:
+
+users
+- user_id integer identity
+- name varchar(100) not null
+- email varchar(150) not null unique
+- password varchar(255) not null
+- role varchar(20) not null
+- created_at timestamp default CURRENT_TIMESTAMP
+- role check: only 'User' or 'Admin'
+
+folders
+- folder_id integer identity
+- name varchar(100) not null
+- owner_id integer nullable
+- created_at timestamp default CURRENT_TIMESTAMP
+- foreign key owner_id -> users(user_id) on delete cascade
+
+documents
+- doc_id integer identity
+- title varchar(255) not null
+- owner_id integer nullable
+- metadata jsonb
+- created_at timestamp default CURRENT_TIMESTAMP
+- updated_at timestamp default CURRENT_TIMESTAMP
+- folder_id integer nullable
+- file_data bytea
+- original_filename varchar(255)
+- content_type varchar(255)
+- foreign key owner_id -> users(user_id) on delete cascade
+- foreign key folder_id -> folders(folder_id) on delete set null
+
+permissions
+- perm_id integer identity
+- doc_id integer nullable
+- user_id integer nullable
+- access_type varchar(20) not null
+- access_type check: only 'Owner', 'Editor', 'Viewer'
+- foreign key doc_id -> documents(doc_id) on delete cascade
+- foreign key user_id -> users(user_id) on delete cascade
+
+sharing_requests
+- request_id integer identity
+- doc_id integer nullable
+- requester_id integer nullable
+- permission varchar(20) not null
+- status varchar(20) default 'Pending'
+- requested_at timestamp default CURRENT_TIMESTAMP
+- status check: only 'Pending', 'Approved', 'Rejected'
+- foreign key doc_id -> documents(doc_id) on delete cascade
+- foreign key requester_id -> users(user_id) on delete cascade
+
+Important note:
+- This local snapshot already has defaults for created_at / updated_at / requested_at.
+- That means your seed files can omit those columns locally, but your RDS must have the same defaults if you want the same behavior.
+
+================================================================
+2) MOST IMPORTANT DIFFERENCES TO CHECK IN RDS
+================================================================
+
+If your RDS is still based on the older schema assumptions, these are the likely differences:
+
+1. Timestamp defaults may be missing.
+- If RDS users.created_at, folders.created_at, documents.created_at, documents.updated_at, or sharing_requests.requested_at do not default to CURRENT_TIMESTAMP, inserts can fail or require explicit timestamps.
+
+2. sharing_requests.permission may be missing or nullable.
+- In your local schema it is NOT NULL.
+- If RDS still allows null or does not have the column, approval/share flows can fail.
+
+3. status constraint may be missing.
+- In your local schema, sharing_requests.status is constrained to Pending / Approved / Rejected.
+- If RDS still stores lowercase or inconsistent values, your application normalization will not line up.
+
+4. permissions.access_type constraint may be missing.
+- In your local schema, only Owner / Editor / Viewer are allowed.
+- If RDS does not enforce this, bad data can get inserted.
+
+5. documents.title is varchar(255), not bytea.
+- This confirms your local database is correct for LOWER(title) / ILIKE searches.
+- If RDS still shows title as bytea, that is the source of lower(bytea) errors.
+
+6. folder delete behavior differs by FK action.
+- documents.folder_id uses ON DELETE SET NULL.
+- If RDS uses CASCADE or RESTRICT, folder deletion behavior will differ.
+
+7. owner foreign keys are cascading.
+- users deletion cascades into folders, documents, permissions, sharing_requests in your local schema.
+- If RDS does not match, deletions can behave differently.
+
+================================================================
+3) WHAT TO ADJUST ON RDS TO MATCH LOCAL
+================================================================
+
+If RDS is behind, apply the following schema adjustments.
+
+3.1 Users table
+
+Expected:
+- created_at default CURRENT_TIMESTAMP
+- role check only User/Admin
+
+Suggested SQL if missing:
+
+ALTER TABLE users
+  ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE users
+  DROP CONSTRAINT IF EXISTS users_role_check;
+
+ALTER TABLE users
+  ADD CONSTRAINT users_role_check
+  CHECK (role IN ('User', 'Admin'));
+
+3.2 Folders table
+
+Expected:
+- created_at default CURRENT_TIMESTAMP
+- owner_id FK on delete cascade
+
+Suggested SQL if missing:
+
+ALTER TABLE folders
+  ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE folders
+  DROP CONSTRAINT IF EXISTS folders_owner_id_fkey;
+
+ALTER TABLE folders
+  ADD CONSTRAINT folders_owner_id_fkey
+  FOREIGN KEY (owner_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+3.3 Documents table
+
+Expected:
+- title varchar(255) not null
+- created_at default CURRENT_TIMESTAMP
+- updated_at default CURRENT_TIMESTAMP
+- folder_id FK ON DELETE SET NULL
+- owner_id FK ON DELETE CASCADE
+
+Suggested SQL if missing:
+
+ALTER TABLE documents
+  ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE documents
+  ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE documents
+  DROP CONSTRAINT IF EXISTS documents_folder_id_fkey;
+
+ALTER TABLE documents
+  ADD CONSTRAINT documents_folder_id_fkey
+  FOREIGN KEY (folder_id) REFERENCES folders(folder_id) ON DELETE SET NULL;
+
+ALTER TABLE documents
+  DROP CONSTRAINT IF EXISTS documents_owner_id_fkey;
+
+ALTER TABLE documents
+  ADD CONSTRAINT documents_owner_id_fkey
+  FOREIGN KEY (owner_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+3.4 Permissions table
+
+Expected:
+- access_type NOT NULL
+- access_type check in Owner / Editor / Viewer
+- doc_id FK ON DELETE CASCADE
+- user_id FK ON DELETE CASCADE
+
+Suggested SQL if missing:
+
+ALTER TABLE permissions
+  DROP CONSTRAINT IF EXISTS permissions_access_type_check;
+
+ALTER TABLE permissions
+  ADD CONSTRAINT permissions_access_type_check
+  CHECK (access_type IN ('Owner', 'Editor', 'Viewer'));
+
+ALTER TABLE permissions
+  DROP CONSTRAINT IF EXISTS permissions_doc_id_fkey;
+
+ALTER TABLE permissions
+  ADD CONSTRAINT permissions_doc_id_fkey
+  FOREIGN KEY (doc_id) REFERENCES documents(doc_id) ON DELETE CASCADE;
+
+ALTER TABLE permissions
+  DROP CONSTRAINT IF EXISTS permissions_user_id_fkey;
+
+ALTER TABLE permissions
+  ADD CONSTRAINT permissions_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+3.5 Sharing requests table
+
+Expected:
+- permission NOT NULL
+- status default Pending
+- status check in Pending / Approved / Rejected
+- requested_at default CURRENT_TIMESTAMP
+- doc_id FK ON DELETE CASCADE
+- requester_id FK ON DELETE CASCADE
+
+Suggested SQL if missing:
+
+ALTER TABLE sharing_requests
+  ALTER COLUMN status SET DEFAULT 'Pending';
+
+ALTER TABLE sharing_requests
+  ALTER COLUMN requested_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE sharing_requests
+  DROP CONSTRAINT IF EXISTS sharing_requests_status_check;
+
+ALTER TABLE sharing_requests
+  ADD CONSTRAINT sharing_requests_status_check
+  CHECK (status IN ('Pending', 'Approved', 'Rejected'));
+
+ALTER TABLE sharing_requests
+  DROP CONSTRAINT IF EXISTS sharing_requests_doc_id_fkey;
+
+ALTER TABLE sharing_requests
+  ADD CONSTRAINT sharing_requests_doc_id_fkey
+  FOREIGN KEY (doc_id) REFERENCES documents(doc_id) ON DELETE CASCADE;
+
+ALTER TABLE sharing_requests
+  DROP CONSTRAINT IF EXISTS sharing_requests_requester_id_fkey;
+
+ALTER TABLE sharing_requests
+  ADD CONSTRAINT sharing_requests_requester_id_fkey
+  FOREIGN KEY (requester_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+================================================================
+4) SEED FILE ADJUSTMENTS YOU SHOULD MAKE
+================================================================
+
+Because your local schema has defaults now, but earlier your insert failed with created_at null, keep these rules in mind:
+
+1. If RDS has the same defaults as local, you can omit created_at / updated_at / requested_at in inserts.
+2. If RDS does not have those defaults yet, include explicit timestamps in your seed rows.
+3. For sharing_requests, include permission always because it is NOT NULL.
+4. For permissions, include access_type always because it is NOT NULL.
+
+Recommended seed strategy for portability:
+- Explicitly include timestamps in seed SQL if you want the same file to work on both local and RDS even before schema alignment.
+- Example: use NOW() or a fixed timestamp value.
+
+================================================================
+5) HOW THIS AFFECTS YOUR APP BEHAVIOR
+================================================================
+
+1. If RDS title is correct varchar/text, LOWER(title) and ILIKE work normally.
+2. If RDS has the same FK actions as local, folder deletion and document movement behave consistently.
+3. If RDS has permission/status constraints, sharing request data stays clean and matches the frontend normalization.
+4. If RDS has defaults for timestamp columns, your seeds and runtime inserts are simpler.
+
+================================================================
+6) QUICK VERIFICATION QUERIES
+================================================================
+
+Run these on RDS to confirm alignment:
+
+\d+ users
+\d+ folders
+\d+ documents
+\d+ permissions
+\d+ sharing_requests
+
+Check these specifically:
+- users.created_at default CURRENT_TIMESTAMP
+- folders.created_at default CURRENT_TIMESTAMP
+- documents.created_at default CURRENT_TIMESTAMP
+- documents.updated_at default CURRENT_TIMESTAMP
+- sharing_requests.requested_at default CURRENT_TIMESTAMP
+- sharing_requests.permission NOT NULL
+- sharing_requests.status check constraint
+- permissions.access_type check constraint
+- documents.folder_id FK ON DELETE SET NULL
+- documents.owner_id FK ON DELETE CASCADE
+
+================================================================
+7) BOTTOM LINE
+================================================================
+
+Your local DB is already in a cleaner state than the earlier assumptions.
+For RDS, the main job is to make sure:
+- timestamp defaults exist
+- sharing_requests.permission is present and NOT NULL
+- status/access_type constraints match
+- document title remains varchar/text
+- FK delete actions match local behavior

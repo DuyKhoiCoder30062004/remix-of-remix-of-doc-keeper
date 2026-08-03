@@ -1,0 +1,171 @@
+PERMISSION + SHARING ALIGNMENT GUIDE
+
+Why this guide exists
+- Your current permission/sharing controllers return entities with missing fields for frontend use.
+- Some request payload fields are ignored in create/update methods.
+- Status and access_type casing is inconsistent (Pending vs PENDING, Owner vs OWNER).
+
+Main problems found
+1) Permission create ignores doc_id and user_id
+- Controller only sets accessType, never sets document and user.
+
+2) Sharing create ignores doc_id and requester
+- Controller sets only status, never sets document and requester.
+
+3) Entity JSON shape is too thin for frontend
+- Because @JsonIgnore on relations, response has only perm_id/access_type and request_id/status/requested_at.
+- Frontend expects richer fields like user_name, user_email, requester_name, requester_email.
+
+4) Casing mismatch
+- Seed data uses Owner/Editor/Viewer and Pending/Approved/Rejected.
+- Frontend was originally expecting uppercase enums.
+
+Recommended approach
+- Keep entities as-is with @JsonIgnore (good for cycle prevention).
+- Return DTOs from controllers instead of raw entities.
+- Resolve and attach relations in service for create methods.
+- Normalize casing to uppercase in backend when saving/updating.
+
+================================================================
+STEP 1) ADD DTOs
+================================================================
+Create lightweight response DTOs.
+
+PermissionResponseDto fields:
+- perm_id
+- doc_id
+- user_id
+- user_name
+- user_email
+- access_type
+
+SharingRequestResponseDto fields:
+- request_id
+- doc_id
+- requester_id
+- requester_name
+- requester_email
+- status
+- requested_at
+
+================================================================
+STEP 2) FIX PERMISSION CREATE/UPDATE FLOW
+================================================================
+In PermissionManagerService inject:
+- DocumentManageRepository
+- UserManagerRepository
+
+Add method:
+createPermission(Integer docId, Integer userId, String accessType)
+- Load document by docId or throw.
+- Load user by userId or throw.
+- Normalize accessType to uppercase.
+- Set relation fields and save.
+
+Normalize helper example:
+private String normalizeAccessType(String raw) {
+  if (raw == null) return "VIEWER";
+  String v = raw.trim().toUpperCase();
+  if (!v.equals("OWNER") && !v.equals("EDITOR") && !v.equals("VIEWER")) return "VIEWER";
+  return v;
+}
+
+Controller create endpoint should call service with request.doc_id and request.user_id.
+Do NOT instantiate entity directly in controller.
+
+================================================================
+STEP 3) FIX SHARING REQUEST CREATE FLOW
+================================================================
+In SharingRequestManagerService inject:
+- DocumentManageRepository
+- UserManagerRepository
+
+Add method:
+createSharingRequest(Integer docId, Integer requesterId)
+- Load document and requester.
+- Set status = "PENDING" (uppercase).
+- Set document + requester and save.
+
+Controller request DTO should include:
+- doc_id
+- requester_id
+
+If requester_id omitted, fallback to authenticated user from SecurityContext.
+
+================================================================
+STEP 4) RETURN DTOs IN CONTROLLERS
+================================================================
+Permissions controller:
+- Return List<PermissionResponseDto>
+- Map each PermissionManager -> DTO including user and document ids/names/emails.
+
+Sharing controller:
+- Return List<SharingRequestResponseDto>
+- Map each SharingRequestManager -> DTO including requester fields and doc_id.
+
+Mapping examples
+Permission DTO mapping:
+- perm_id = entity.getPermId()
+- doc_id = entity.getDocument() != null ? entity.getDocument().getDocId() : null
+- user_id = entity.getUser() != null ? entity.getUser().getUserId() : null
+- user_name = entity.getUser() != null ? entity.getUser().getName() : null
+- user_email = entity.getUser() != null ? entity.getUser().getEmail() : null
+- access_type = normalizeAccessType(entity.getAccessType())
+
+Sharing DTO mapping:
+- request_id = entity.getRequestId()
+- doc_id = entity.getDocument() != null ? entity.getDocument().getDocId() : null
+- requester_id = entity.getRequester() != null ? entity.getRequester().getUserId() : null
+- requester_name = entity.getRequester() != null ? entity.getRequester().getName() : null
+- requester_email = entity.getRequester() != null ? entity.getRequester().getEmail() : null
+- status = normalizeStatus(entity.getStatus())
+- requested_at = entity.getRequestedAt()
+
+================================================================
+STEP 5) NORMALIZE EXISTING SEED DATA (OPTIONAL BUT RECOMMENDED)
+================================================================
+Run once:
+
+UPDATE permissions
+SET access_type = UPPER(access_type);
+
+UPDATE sharing_requests
+SET status = UPPER(status);
+
+This removes mixed-case ambiguity.
+
+================================================================
+STEP 6) QUICK API CONTRACT CHECK
+================================================================
+Permissions list should look like:
+[
+  {
+    "perm_id": 5,
+    "doc_id": 5,
+    "user_id": 5,
+    "user_name": "User 005",
+    "user_email": "user005@firm.com",
+    "access_type": "EDITOR"
+  }
+]
+
+Sharing list should look like:
+[
+  {
+    "request_id": 5,
+    "doc_id": 5,
+    "requester_id": 6,
+    "requester_name": "User 006",
+    "requester_email": "user006@firm.com",
+    "status": "APPROVED",
+    "requested_at": "2026-07-23T15:57:09.903141"
+  }
+]
+
+================================================================
+STEP 7) WHY THIS FITS YOUR BUSINESS
+================================================================
+- Keeps relational integrity (doc/user links must exist).
+- Prevents null-rich responses for frontend display.
+- Keeps response shape stable and explicit.
+- Avoids circular serialization while still exposing needed fields.

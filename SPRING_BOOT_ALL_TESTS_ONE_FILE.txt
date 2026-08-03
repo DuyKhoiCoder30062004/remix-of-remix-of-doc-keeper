@@ -1,0 +1,624 @@
+SPRING BOOT ALL TESTS (ONE FILE PACK)
+
+This file contains copy-ready test code in one place.
+You can split each section into its own test file under src/test/java.
+
+================================================================
+0) REQUIRED TEST DEPENDENCIES
+================================================================
+
+Use these dependencies (Maven artifact names):
+- spring-boot-starter-test
+- spring-security-test
+- mockito-core
+
+Optional:
+- testcontainers-junit-jupiter
+- testcontainers-postgresql
+
+================================================================
+1) UNIT TEST - AUTHSERVICE
+File: src/test/java/com/saigontechnologyintern/document_management/authManagement/AuthServiceTest.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management.authManagement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@ExtendWith(MockitoExtension.class)
+class AuthServiceTest {
+
+  @Mock private UserManagerRepository userRepository;
+  @Mock private JwtService jwtService;
+  @Mock private PasswordEncoder passwordEncoder;
+
+  @InjectMocks private AuthService authService;
+
+  private RegisterRequest registerRequest;
+  private LoginRequest loginRequest;
+  private UserManager existingUser;
+
+  @BeforeEach
+  void setUp() {
+    registerRequest = new RegisterRequest("Alice", "alice@test.com", "secret");
+    loginRequest = new LoginRequest("alice@test.com", "secret");
+
+    existingUser = new UserManager("Alice", "alice@test.com", "hashed", "User");
+    existingUser.setUserId(1);
+    existingUser.setCreatedAt(LocalDateTime.now());
+  }
+
+  @Test
+  void register_success() {
+    when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.empty());
+    when(passwordEncoder.encode("secret")).thenReturn("hashed");
+    when(jwtService.generateToken(any(UserManager.class))).thenReturn("jwt-token");
+
+    AuthResponseDto result = authService.register(registerRequest);
+
+    assertThat(result.getToken()).isEqualTo("jwt-token");
+    assertThat(result.getUser().getEmail()).isEqualTo("alice@test.com");
+    verify(userRepository).save(any(UserManager.class));
+  }
+
+  @Test
+  void register_duplicateEmail_throws() {
+    when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(existingUser));
+
+    assertThatThrownBy(() -> authService.register(registerRequest))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Email already registered");
+  }
+
+  @Test
+  void login_success() {
+    when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(existingUser));
+    when(passwordEncoder.matches("secret", "hashed")).thenReturn(true);
+    when(jwtService.generateToken(existingUser)).thenReturn("jwt-token");
+
+    AuthResponseDto result = authService.login(loginRequest);
+
+    assertThat(result.getToken()).isEqualTo("jwt-token");
+    assertThat(result.getUser().getUserId()).isEqualTo(1);
+  }
+
+  @Test
+  void login_wrongPassword_throws() {
+    when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(existingUser));
+    when(passwordEncoder.matches("secret", "hashed")).thenReturn(false);
+
+    assertThatThrownBy(() -> authService.login(loginRequest))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Invalid email or password");
+  }
+
+  @Test
+  void getCurrentUser_success() {
+    when(jwtService.extractUserId("jwt-token")).thenReturn(1);
+    when(userRepository.findById(1)).thenReturn(Optional.of(existingUser));
+
+    UserManager result = authService.getCurrentUser("jwt-token");
+
+    assertThat(result.getUserId()).isEqualTo(1);
+    assertThat(result.getEmail()).isEqualTo("alice@test.com");
+  }
+}
+```
+
+================================================================
+2) UNIT TEST - JWTSERVICE
+File: src/test/java/com/saigontechnologyintern/document_management/authManagement/JwtServiceTest.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management.authManagement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+class JwtServiceTest {
+
+  private JwtService jwtService;
+
+  @BeforeEach
+  void setUp() {
+    jwtService = new JwtService();
+    // 32-byte base64 key: "abcdefghijklmnopqrstuvwxyz123456"
+    ReflectionTestUtils.setField(jwtService, "jwtSecret", "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=");
+    ReflectionTestUtils.setField(jwtService, "jwtExpirationMs", 3_600_000L);
+  }
+
+  @Test
+  void generateAndExtract_success() {
+    UserManager user = new UserManager("Alice", "alice@test.com", "hash", "User");
+    user.setUserId(123);
+
+    String token = jwtService.generateToken(user);
+
+    assertThat(token).isNotBlank();
+    assertThat(jwtService.extractUserId(token)).isEqualTo(123);
+    assertThat(jwtService.extractRole(token)).isEqualTo("USER");
+    assertThat(jwtService.isTokenValid(token)).isTrue();
+  }
+
+  @Test
+  void invalidToken_returnsFalse() {
+    assertThat(jwtService.isTokenValid("not-a-jwt")).isFalse();
+  }
+
+  @Test
+  void invalidSubject_throws() {
+    UserManager user = new UserManager("Alice", "alice@test.com", "hash", "User");
+    user.setUserId(1);
+    String token = jwtService.generateToken(user);
+    // Use wrong key to generate parse failure path by swapping service key.
+    ReflectionTestUtils.setField(jwtService, "jwtSecret", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+
+    assertThat(jwtService.isTokenValid(token)).isFalse();
+  }
+}
+```
+
+================================================================
+3) UNIT TEST - DOCUMENTMANAGESERVICE
+File: src/test/java/com/saigontechnologyintern/document_management/documentManagement/DocumentManageServiceTest.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management.documentManagement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.saigontechnologyintern.document_management.folderManagement.FolderManager;
+import com.saigontechnologyintern.document_management.folderManagement.FolderManagerRepository;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManager;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManagerRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
+
+@ExtendWith(MockitoExtension.class)
+class DocumentManageServiceTest {
+
+  @Mock private DocumentManageRepository documentManageRepository;
+  @Mock private FolderManagerRepository folderManagerRepository;
+  @Mock private UserManagerRepository userManagerRepository;
+  @Mock private PermissionManagerRepository permissionManagerRepository;
+
+  @InjectMocks private DocumentManageService service;
+
+  private UserManager owner;
+  private DocumentManage doc;
+
+  @BeforeEach
+  void setUp() {
+    owner = new UserManager();
+    owner.setUserId(1);
+    owner.setRole("User");
+
+    doc = new DocumentManage();
+    doc.setDocId(10);
+    doc.setOwner(owner);
+    doc.setTitle("Spec");
+    doc.setMetadata(Map.of("mime_type", "text/plain"));
+  }
+
+  @Test
+  void getDocuments_noFilters_callsVisibleQuery() {
+    when(documentManageRepository.findVisibleDocumentsForUser(1)).thenReturn(List.of(doc));
+    List<DocumentManage> result = service.getDocuments(1, null, null);
+    assertThat(result).hasSize(1);
+    verify(documentManageRepository).findVisibleDocumentsForUser(1);
+  }
+
+  @Test
+  void getDocumentById_ownerCanView() {
+    when(documentManageRepository.findById(10)).thenReturn(Optional.of(doc));
+    assertThat(service.getDocumentById(10, 1)).isSameAs(doc);
+  }
+
+  @Test
+  void getDocumentById_userWithoutPermission_throws() {
+    when(documentManageRepository.findById(10)).thenReturn(Optional.of(doc));
+    when(permissionManagerRepository.findByDocument_DocIdAndUser_UserId(10, 2))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.getDocumentById(10, 2))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Document not found");
+  }
+
+  @Test
+  void createDocument_createsOwnerPermissionRow() throws Exception {
+    MockMultipartFile file = new MockMultipartFile("file", "a.txt", "text/plain", "hello".getBytes());
+    when(userManagerRepository.findById(1)).thenReturn(Optional.of(owner));
+    when(documentManageRepository.save(any(DocumentManage.class))).thenAnswer(inv -> {
+      DocumentManage saved = inv.getArgument(0);
+      saved.setDocId(100);
+      return saved;
+    });
+    when(permissionManagerRepository.findByDocument_DocIdAndUser_UserId(100, 1))
+        .thenReturn(Optional.empty());
+
+    DocumentManage saved = service.createDocument(file, null, "Title", 1);
+
+    assertThat(saved.getDocId()).isEqualTo(100);
+    verify(permissionManagerRepository).save(any(PermissionManager.class));
+  }
+
+  @Test
+  void moveDocument_notOwner_throws() {
+    UserManager another = new UserManager();
+    another.setUserId(2);
+    doc.setOwner(another);
+
+    when(documentManageRepository.findById(10)).thenReturn(Optional.of(doc));
+
+    assertThatThrownBy(() -> service.moveDocument(10, 5, 1))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("permission");
+  }
+}
+```
+
+================================================================
+4) UNIT TEST - PERMISSIONMANAGERSERVICE
+File: src/test/java/com/saigontechnologyintern/document_management/permissionManagement/PermissionManagerServiceTest.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management.permissionManagement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManage;
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManageRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class PermissionManagerServiceTest {
+
+  @Mock private PermissionManagerRepository permissionManagerRepository;
+  @Mock private DocumentManageRepository documentManageRepository;
+  @Mock private UserManagerRepository userManagerRepository;
+
+  @InjectMocks private PermissionManagerService service;
+
+  @Test
+  void updatePermission_editorShouldStayEditor() {
+    PermissionManager permission = new PermissionManager();
+    permission.setPermId(1);
+    permission.setAccessType("Viewer");
+
+    when(permissionManagerRepository.findById(1)).thenReturn(Optional.of(permission));
+    when(permissionManagerRepository.save(any(PermissionManager.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    PermissionManager updated = service.updatePermission(1, "Editor");
+
+    // This should pass after normalizeAccessType bug is fixed to lower-case mapping.
+    assertThat(updated.getAccessType()).isEqualTo("Editor");
+  }
+
+  @Test
+  void createPermission_success() {
+    DocumentManage doc = new DocumentManage();
+    doc.setDocId(10);
+    UserManager user = new UserManager();
+    user.setUserId(2);
+
+    when(documentManageRepository.findById(10)).thenReturn(Optional.of(doc));
+    when(userManagerRepository.findById(2)).thenReturn(Optional.of(user));
+    when(permissionManagerRepository.save(any(PermissionManager.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    PermissionManager created = service.createPermission(10, 2, "Viewer");
+    assertThat(created.getDocument().getDocId()).isEqualTo(10);
+    assertThat(created.getUser().getUserId()).isEqualTo(2);
+  }
+}
+```
+
+================================================================
+5) UNIT TEST - SHARINGREQUESTMANAGERSERVICE
+File: src/test/java/com/saigontechnologyintern/document_management/sharingRequestManagement/SharingRequestManagerServiceTest.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management.sharingRequestManagement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManage;
+import com.saigontechnologyintern.document_management.documentManagement.DocumentManageRepository;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManager;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManagerRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class SharingRequestManagerServiceTest {
+
+  @Mock private SharingRequestManagerRepository sharingRepo;
+  @Mock private DocumentManageRepository documentRepo;
+  @Mock private UserManagerRepository userRepo;
+  @Mock private PermissionManagerRepository permissionRepo;
+
+  @InjectMocks private SharingRequestManagerService service;
+
+  private DocumentManage doc;
+  private UserManager owner;
+  private UserManager recipient;
+
+  @BeforeEach
+  void setUp() {
+    owner = new UserManager();
+    owner.setUserId(1);
+    recipient = new UserManager();
+    recipient.setUserId(2);
+    doc = new DocumentManage();
+    doc.setDocId(10);
+    doc.setOwner(owner);
+  }
+
+  @Test
+  void createSharingRequest_ownerCanCreate() {
+    when(documentRepo.findById(10)).thenReturn(Optional.of(doc));
+    when(userRepo.findById(2)).thenReturn(Optional.of(recipient));
+    when(sharingRepo.save(any(SharingRequestManager.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    SharingRequestManager created = service.createSharingRequest(10, 2, "Editor", 1);
+
+    assertThat(created.getStatus()).isEqualTo("Pending");
+    assertThat(created.getRequester().getUserId()).isEqualTo(2);
+  }
+
+  @Test
+  void approveSharingRequest_recipientOnly() {
+    SharingRequestManager req = new SharingRequestManager();
+    req.setRequestId(5);
+    req.setDocument(doc);
+    req.setRequester(recipient);
+    req.setPermission("Editor");
+
+    when(sharingRepo.findById(5)).thenReturn(Optional.of(req));
+    when(sharingRepo.save(any(SharingRequestManager.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(permissionRepo.findByDocument_DocIdAndUser_UserId(10, 2)).thenReturn(Optional.empty());
+
+    SharingRequestManager approved = service.approveSharingRequest(5, 2);
+
+    assertThat(approved.getStatus()).isEqualTo("Approved");
+    verify(permissionRepo).save(any(PermissionManager.class));
+  }
+
+  @Test
+  void approveSharingRequest_nonRecipientDenied() {
+    SharingRequestManager req = new SharingRequestManager();
+    req.setRequestId(5);
+    req.setRequester(recipient);
+    when(sharingRepo.findById(5)).thenReturn(Optional.of(req));
+
+    assertThatThrownBy(() -> service.approveSharingRequest(5, 99))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Only recipient");
+  }
+}
+```
+
+================================================================
+6) INTEGRATION TEST - AUTHCONTROLLER (WEB LAYER)
+File: src/test/java/com/saigontechnologyintern/document_management/authManagement/AuthControllerWebMvcTest.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management.authManagement;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(AuthController.class)
+class AuthControllerWebMvcTest {
+
+  @Autowired private MockMvc mockMvc;
+  @Autowired private ObjectMapper objectMapper;
+
+  @MockBean private AuthService authService;
+  @MockBean private JwtService jwtService;
+
+  @Test
+  void register_success() throws Exception {
+    UserManager user = new UserManager();
+    user.setUserId(1);
+    user.setEmail("a@test.com");
+    AuthResponseDto dto = new AuthResponseDto("token", user);
+    when(authService.register(any(RegisterRequest.class))).thenReturn(dto);
+
+    mockMvc.perform(post("/api/v1/auth/register")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new RegisterRequest("A", "a@test.com", "pw"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.token").value("token"));
+  }
+
+  @Test
+  void login_invalid_returns401() throws Exception {
+    when(authService.login(any(LoginRequest.class))).thenThrow(new IllegalArgumentException("Invalid email or password"));
+
+    mockMvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(new LoginRequest("x@test.com", "pw"))))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.message").exists());
+  }
+
+  @Test
+  void me_validToken_returnsUser() throws Exception {
+    UserManager user = new UserManager();
+    user.setUserId(1);
+    user.setEmail("a@test.com");
+
+    when(jwtService.isTokenValid("abc")).thenReturn(true);
+    when(authService.getCurrentUser("abc")).thenReturn(user);
+
+    mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer abc"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.userId").value(1));
+  }
+}
+```
+
+================================================================
+7) INTEGRATION TEST - DOCUMENT QUERY (JPA)
+File: src/test/java/com/saigontechnologyintern/document_management/documentManagement/DocumentManageRepositoryDataJpaTest.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management.documentManagement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManager;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManagerRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+
+@DataJpaTest
+class DocumentManageRepositoryDataJpaTest {
+
+  @Autowired private DocumentManageRepository documentRepo;
+  @Autowired private UserManagerRepository userRepo;
+  @Autowired private PermissionManagerRepository permissionRepo;
+
+  @Test
+  void findVisibleDocumentsForUserFiltered_filtersByTitleAndVisibility() {
+    UserManager owner = userRepo.save(new UserManager("Owner", "owner@test.com", "pw", "User"));
+    UserManager viewer = userRepo.save(new UserManager("Viewer", "viewer@test.com", "pw", "User"));
+
+    DocumentManage d1 = new DocumentManage();
+    d1.setTitle("Quarterly Plan");
+    d1.setOwner(owner);
+    d1 = documentRepo.save(d1);
+
+    PermissionManager p = new PermissionManager();
+    p.setDocument(d1);
+    p.setUser(viewer);
+    p.setAccessType("Viewer");
+    permissionRepo.save(p);
+
+    List<DocumentManage> result = documentRepo.findVisibleDocumentsForUserFiltered(
+        viewer.getUserId(), null, "plan");
+
+    assertThat(result).extracting(DocumentManage::getTitle).contains("Quarterly Plan");
+  }
+}
+```
+
+================================================================
+8) INTEGRATION TEST - FULL CONTEXT (SMOKE)
+File: src/test/java/com/saigontechnologyintern/document_management/ApplicationSmokeIT.java
+================================================================
+
+```java
+package com.saigontechnologyintern.document_management;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class ApplicationSmokeIT {
+
+  @Test
+  void contextLoads() {
+    assertThat(true).isTrue();
+  }
+}
+```
+
+================================================================
+9) IMPORTANT NOTES FOR YOUR CURRENT CODEBASE
+================================================================
+
+1. Permission normalization bug still exists in your latest PermissionManagerService:
+   it uses toUpperCase and compares to "Owner"/"Editor"/"Viewer".
+   This may cause tests expecting Editor/Owner to fail.
+
+2. If you still hit lower(bytea) in repository tests, that is DB schema type mismatch:
+   documents.title must be text/varchar in the actual DB.
+
+3. Sharing flow payload alignment:
+   frontend now sends requester_id mapped from selected user; backend expects this.
+
+4. For controller integration tests under strict security, include Authorization Bearer headers
+   or use @WithMockUser where appropriate.

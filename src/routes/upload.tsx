@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { UploadCloud } from "lucide-react";
 import { documentsApi, apiErrorMessage } from "@/lib/api";
+import { getDocumentSizeBytes } from "@/lib/document-metadata";
 
 export const Route = createFileRoute("/upload")({
   component: UploadPage,
@@ -100,7 +101,7 @@ function UploadPage() {
             </h3>
             <div className="space-y-2">
               {recent.slice(0, 5).map((d) => (
-                <UploadRow key={d.doc_id} name={d.title} size={formatSize(d.metadata.size_bytes)} progress={100} />
+                <UploadRow key={d.doc_id ?? d.docId} name={d.title} size={formatSize(getDocumentSizeBytes(d))} progress={100} />
               ))}
             </div>
           </div>

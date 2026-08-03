@@ -1,0 +1,227 @@
+ONE FILE GUIDE: FIX UPLOAD/DOWNLOAD SO FILE CONTENT IS PRESERVED
+
+Goal
+- Keep real file bytes when uploading.
+- Return the exact same bytes when downloading.
+- Keep metadata format compatible with frontend:
+  extension, mime_type, size_bytes.
+
+================================================================
+STEP 1) UPDATE DOCUMENT ENTITY (DocumentManage)
+================================================================
+Add fields to store real file content and file headers.
+
+Required fields to add:
+
+@Lob
+@Column(name = "file_data")
+private byte[] fileData;
+
+@Column(name = "original_filename")
+private String originalFilename;
+
+@Column(name = "content_type")
+private String contentType;
+
+If your metadata is already Map<String, Object> + json/jsonb mapping, keep it.
+Do NOT switch metadata back to String.
+
+Also add getters/setters for:
+- fileData
+- originalFilename
+- contentType
+
+================================================================
+STEP 2) UPDATE SERVICE SIGNATURE AND LOGIC (DocumentManageService)
+================================================================
+Replace your current createDocument(DocumentManage document) flow with:
+
+public DocumentManage createDocument(MultipartFile file, Integer folderId, String title)
+
+What this method must do:
+1. Build new DocumentManage.
+2. Resolve title:
+   - use title if provided
+   - else use file.getOriginalFilename()
+3. Build extension from original filename.
+4. Build metadata map:
+   - extension
+   - mime_type
+   - size_bytes
+5. Set binary/file fields:
+   - setFileData(file.getBytes())
+   - setOriginalFilename(originalFilename)
+   - setContentType(mime)
+6. If folderId != null, load folder entity and set document folder.
+7. Save via repository.
+
+Example implementation:
+
+public DocumentManage createDocument(MultipartFile file, Integer folderId, String title) {
+    try {
+        DocumentManage document = new DocumentManage();
+
+        String originalFilename = file.getOriginalFilename();
+        String resolvedTitle = (title != null && !title.isBlank()) ? title : originalFilename;
+        document.setTitle(resolvedTitle);
+
+        String extension = "FILE";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toUpperCase();
+        }
+
+        String mime = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
+
+        document.setMetadata(java.util.Map.of(
+                "extension", extension,
+                "mime_type", mime,
+                "size_bytes", file.getSize()
+        ));
+
+        document.setOriginalFilename(originalFilename);
+        document.setContentType(mime);
+        document.setFileData(file.getBytes());
+
+        if (folderId != null) {
+            FolderManager folder = folderManagerRepository.findById(folderId)
+                    .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+            document.setFolder(folder);
+        }
+
+        return documentManageRepository.save(document);
+    } catch (java.io.IOException e) {
+        throw new RuntimeException("Failed to read uploaded file content", e);
+    }
+}
+
+Notes:
+- Inject FolderManagerRepository into this service if you use folder_id.
+- Keep moveDocument() only changing folder field.
+
+================================================================
+STEP 2.5) REPOSITORY ALIGNMENT (DocumentManageRepository)
+================================================================
+Your existing repository method is correct and should stay:
+
+List<DocumentManage> findByFolder_FolderId(Integer folderId);
+
+This method is used by getDocuments(folderId, q) and does not conflict with
+the new createDocument(MultipartFile file, Integer folderId, String title)
+service method.
+
+Minimal repository (example):
+
+public interface DocumentManageRepository extends JpaRepository<DocumentManage, Integer> {
+    List<DocumentManage> findByTitleContainingIgnoreCase(String title);
+    List<DocumentManage> findByFolder_FolderId(Integer folderId);
+}
+
+Optional for faster move-only updates (not required):
+@Modifying
+@Query("update DocumentManage d set d.folder = :folder where d.docId = :docId")
+int moveToFolder(@Param("docId") Integer docId, @Param("folder") FolderManager folder);
+
+================================================================
+STEP 3) UPDATE CONTROLLER UPLOAD ENDPOINT (DocumentManageController)
+================================================================
+Current controller builds DocumentManage directly.
+Change it to delegate to service method above.
+
+Replace createDocument endpoint body with:
+
+@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public DocumentManage createDocument(
+        @RequestParam("file") MultipartFile file,
+        @RequestParam(value = "folder_id", required = false) Integer folderId,
+        @RequestParam(value = "title", required = false) String title) {
+    return documentManageService.createDocument(file, folderId, title);
+}
+
+================================================================
+STEP 4) REPLACE DOWNLOAD PLACEHOLDER ENDPOINT
+================================================================
+Your current endpoint returns new byte[] {1,2,3}.
+Replace with real file bytes and proper headers.
+
+Use this:
+
+@GetMapping("/{id}/download")
+public ResponseEntity<byte[]> downloadDocument(@PathVariable Integer id) {
+    DocumentManage doc = documentManageService.getDocumentById(id);
+
+    byte[] content = doc.getFileData();
+    if (content == null || content.length == 0) {
+        throw new IllegalArgumentException("No file content stored for document id: " + id);
+    }
+
+    String filename = (doc.getOriginalFilename() != null && !doc.getOriginalFilename().isBlank())
+            ? doc.getOriginalFilename()
+            : doc.getTitle();
+
+    String contentType = (doc.getContentType() != null && !doc.getContentType().isBlank())
+            ? doc.getContentType()
+            : "application/octet-stream";
+
+    return ResponseEntity.ok()
+            .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+            .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
+            .body(content);
+}
+
+================================================================
+STEP 5) DATABASE CHANGES (POSTGRES)
+================================================================
+Add missing columns in documents table if not yet present:
+- file_data bytea
+- original_filename varchar(255)
+- content_type varchar(255)
+
+Example SQL:
+
+ALTER TABLE documents
+ADD COLUMN IF NOT EXISTS file_data bytea,
+ADD COLUMN IF NOT EXISTS original_filename varchar(255),
+ADD COLUMN IF NOT EXISTS content_type varchar(255);
+
+If metadata column is already jsonb, keep it.
+
+================================================================
+STEP 6) FRONTEND COMPATIBILITY CHECK
+================================================================
+Your frontend currently expects metadata keys:
+- extension
+- mime_type
+- size_bytes
+
+Keep these exact keys from backend for clean display.
+
+================================================================
+STEP 7) TEST FLOW
+================================================================
+1. Restart backend.
+2. Upload a txt/pdf/doc with obvious text content.
+3. Check DB row:
+   - metadata has extension/mime_type/size_bytes
+   - file_data is not null
+4. Click download in UI.
+5. Open downloaded file and verify original text/content is intact.
+
+================================================================
+COMMON PITFALLS
+================================================================
+1) File downloads empty
+- Cause: file_data not saved, or download endpoint still placeholder bytes.
+
+2) SQL jsonb error on metadata
+- Cause: metadata mapped as String instead of JSON map.
+
+3) Unauthorized on upload/download
+- Cause: missing Authorization: Bearer <token> on protected endpoints.
+
+================================================================
+DONE CRITERIA
+================================================================
+You are done when:
+- Upload stores both metadata and binary content.
+- Download returns original file bytes.
+- Dashboard still shows file size/type correctly.

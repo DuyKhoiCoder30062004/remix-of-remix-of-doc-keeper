@@ -1,0 +1,200 @@
+DOCUMENT UPLOAD/DOWNLOAD IMPLEMENTATION GUIDE
+
+Purpose
+- Preserve real file content when uploading.
+- Return the same file content when downloading.
+- Keep metadata format compatible with frontend display.
+
+Your current status
+- Repository is OK:
+  - DocumentManageRepository has findByTitleContainingIgnoreCase and findByFolder_FolderId.
+  - FolderManagerRepository exists and is enough for folder validation.
+- Entity mostly ready:
+  - metadata is jsonb map.
+  - fileData/originalFilename/contentType fields already exist.
+- Remaining issues:
+  - Upload currently stores only metadata but not guaranteed file bytes.
+  - Download endpoint still returns placeholder bytes [1,2,3].
+
+================================================================
+STEP 1) KEEP REPOSITORIES AS-IS
+================================================================
+No required change for:
+- DocumentManageRepository
+- FolderManagerRepository
+
+These are sufficient for this business flow.
+
+================================================================
+STEP 2) UPDATE DOCUMENT SERVICE TO HANDLE MULTIPART FILE
+================================================================
+In DocumentManageService:
+
+1) Inject FolderManagerRepository:
+
+private final FolderManagerRepository folderManagerRepository;
+
+public DocumentManageService(
+        DocumentManageRepository documentManageRepository,
+        FolderManagerRepository folderManagerRepository) {
+    this.documentManageRepository = documentManageRepository;
+    this.folderManagerRepository = folderManagerRepository;
+}
+
+2) Add/replace upload method:
+
+public DocumentManage createDocument(MultipartFile file, Integer folderId, String title) {
+    try {
+        DocumentManage document = new DocumentManage();
+
+        String originalFilename = file.getOriginalFilename();
+        String resolvedTitle = (title != null && !title.isBlank()) ? title : originalFilename;
+        document.setTitle(resolvedTitle != null ? resolvedTitle : "Untitled");
+
+        String extension = "FILE";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toUpperCase();
+        }
+
+        String mime = (file.getContentType() == null || file.getContentType().isBlank())
+                ? "application/octet-stream"
+                : file.getContentType();
+
+        // Frontend expects extension + mime_type + size_bytes
+        document.setMetadata(Map.of(
+                "extension", extension,
+                "mime_type", mime,
+                "size_bytes", file.getSize()
+        ));
+
+        // Store real file content
+        document.setOriginalFilename(originalFilename);
+        document.setContentType(mime);
+        document.setFileData(file.getBytes());
+
+        // Optional folder binding
+        if (folderId != null) {
+            FolderManager folder = folderManagerRepository.findById(folderId)
+                    .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+            document.setFolder(folder);
+        }
+
+        return documentManageRepository.save(document);
+    } catch (IOException e) {
+        throw new RuntimeException("Failed to read uploaded file content", e);
+    }
+}
+
+3) Keep your existing createDocument(DocumentManage document) only if still used elsewhere.
+   If not used, remove it to avoid confusion.
+
+================================================================
+STEP 3) UPDATE DOCUMENT CONTROLLER UPLOAD ENDPOINT
+================================================================
+Replace upload method body to delegate file handling to service:
+
+@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public DocumentManage createDocument(
+        @RequestParam("file") MultipartFile file,
+        @RequestParam(value = "folder_id", required = false) Integer folderId,
+        @RequestParam(value = "title", required = false) String title) {
+    return documentManageService.createDocument(file, folderId, title);
+}
+
+================================================================
+STEP 4) REPLACE DOWNLOAD PLACEHOLDER ENDPOINT
+================================================================
+Replace current:
+return ResponseEntity.ok().body(new byte[] {1, 2, 3});
+
+With:
+
+@GetMapping("/{id}/download")
+public ResponseEntity<byte[]> downloadDocument(@PathVariable Integer id) {
+    DocumentManage doc = documentManageService.getDocumentById(id);
+
+    byte[] content = doc.getFileData();
+    if (content == null || content.length == 0) {
+        throw new IllegalArgumentException("No file content stored for document id: " + id);
+    }
+
+    String filename = (doc.getOriginalFilename() != null && !doc.getOriginalFilename().isBlank())
+            ? doc.getOriginalFilename()
+            : doc.getTitle();
+
+    String contentType = (doc.getContentType() != null && !doc.getContentType().isBlank())
+            ? doc.getContentType()
+            : "application/octet-stream";
+
+    return ResponseEntity.ok()
+            .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+            .contentType(MediaType.parseMediaType(contentType))
+            .body(content);
+}
+
+================================================================
+STEP 5) VERIFY ENTITY FIELDS EXIST
+================================================================
+In DocumentManage, ensure these fields exist:
+
+@Lob
+@Column(name = "file_data")
+private byte[] fileData;
+
+@Column(name = "original_filename")
+private String originalFilename;
+
+@Column(name = "content_type")
+private String contentType;
+
+Also keep metadata as:
+
+@JdbcTypeCode(SqlTypes.JSON)
+@Column(columnDefinition = "jsonb")
+private Map<String, Object> metadata;
+
+================================================================
+STEP 6) DATABASE MIGRATION (POSTGRES)
+================================================================
+Run once if columns do not exist:
+
+ALTER TABLE documents
+ADD COLUMN IF NOT EXISTS file_data bytea,
+ADD COLUMN IF NOT EXISTS original_filename varchar(255),
+ADD COLUMN IF NOT EXISTS content_type varchar(255);
+
+Keep metadata column as jsonb.
+
+================================================================
+STEP 7) TEST CHECKLIST
+================================================================
+1) Restart backend.
+2) Login and get token.
+3) Upload a .txt file containing obvious text.
+4) Query DB row for uploaded doc:
+   - metadata has extension/mime_type/size_bytes.
+   - file_data is not null.
+5) Download same doc.
+6) Open file and verify text is intact.
+
+================================================================
+COMMON FAILURES AND FIXES
+================================================================
+1) Downloaded file empty
+- Cause: fileData not saved or still using placeholder download response.
+
+2) 401 Unauthorized
+- Cause: missing Authorization header.
+- Use: Authorization: Bearer <token>
+
+3) size/type not shown in UI
+- Cause: metadata keys mismatch.
+- Must include: extension, mime_type, size_bytes.
+
+================================================================
+DONE DEFINITION
+================================================================
+You are done when:
+- Upload saves binary content.
+- Download returns original bytes.
+- Dashboard and detail page show size/type correctly.

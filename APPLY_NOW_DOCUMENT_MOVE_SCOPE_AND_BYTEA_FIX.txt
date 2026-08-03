@@ -1,0 +1,227 @@
+APPLY NOW - DOCUMENT MOVE + USER SCOPING + BYTEA FIX
+
+Use this file as an exact implementation checklist.
+
+================================================================
+A) FIX BYTEA MAPPING (REQUIRED FIRST)
+================================================================
+Problem you saw:
+- PostgreSQL: Cannot convert column type BYTEA to requested type long.
+- Cause: Hibernate treated file_data as BLOB style instead of bytea style.
+
+In DocumentManage entity, replace fileData mapping with this:
+
+@org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARBINARY)
+@Column(name = "file_data", columnDefinition = "bytea")
+private byte[] fileData;
+
+Important:
+- Remove @Lob from fileData if present.
+- Keep field type as byte[].
+
+Keep metadata mapping as:
+
+@JdbcTypeCode(SqlTypes.JSON)
+@Column(columnDefinition = "jsonb")
+private Map<String, Object> metadata;
+
+================================================================
+B) MAKE MOVE DOCUMENT WORK WITH folder_id PAYLOAD
+================================================================
+Frontend/API should send:
+{
+  "folder_id": 10
+}
+
+1) In DocumentManageController, add request DTO:
+
+public static class MoveDocumentRequest {
+    private Integer folder_id;
+
+    public Integer getFolder_id() {
+        return folder_id;
+    }
+
+    public void setFolder_id(Integer folder_id) {
+        this.folder_id = folder_id;
+    }
+}
+
+2) Replace move endpoint with:
+
+@PatchMapping("/{id}/move")
+public DocumentManage moveDocument(@PathVariable Integer id, @RequestBody MoveDocumentRequest request) {
+    return documentManageService.moveDocument(id, request.getFolder_id());
+}
+
+3) In DocumentManageService, replace move method with:
+
+public DocumentManage moveDocument(Integer id, Integer folderId) {
+    if (folderId == null) {
+        throw new IllegalArgumentException("folder_id is required");
+    }
+
+    DocumentManage existing = getDocumentById(id);
+    FolderManager target = folderManagerRepository
+            .findById(folderId)
+            .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+    UserManager current = getCurrentUser();
+
+    // Owner-only move policy (adjust if you want admin override)
+    if (existing.getOwner() == null || !existing.getOwner().getUserId().equals(current.getUserId())) {
+        throw new IllegalArgumentException("You can only move your own documents");
+    }
+
+    if (target.getOwner() == null || !target.getOwner().getUserId().equals(current.getUserId())) {
+        throw new IllegalArgumentException("You can only move to your own folders");
+    }
+
+    existing.setFolder(target);
+    return documentManageRepository.save(existing);
+}
+
+================================================================
+C) SCOPE DOCUMENT LIST TO CURRENT USER
+================================================================
+Goal:
+- Each user sees only their own documents by default.
+
+1) Add repository methods in DocumentManageRepository:
+
+List<DocumentManage> findByOwner_UserId(Integer userId);
+List<DocumentManage> findByOwner_UserIdAndFolder_FolderId(Integer userId, Integer folderId);
+List<DocumentManage> findByOwner_UserIdAndTitleContainingIgnoreCase(Integer userId, String title);
+
+2) In DocumentManageService, update list/search methods:
+
+public List<DocumentManage> getDocuments(Integer folderId, String q) {
+    UserManager current = getCurrentUser();
+    Integer userId = current.getUserId();
+
+    if (folderId != null) {
+        if (q != null && !q.isBlank()) {
+            return documentManageRepository
+                    .findByOwner_UserIdAndFolder_FolderId(userId, folderId)
+                    .stream()
+                    .filter(doc -> doc.getTitle() != null && doc.getTitle().toLowerCase().contains(q.toLowerCase()))
+                    .toList();
+        }
+        return documentManageRepository.findByOwner_UserIdAndFolder_FolderId(userId, folderId);
+    }
+
+    return searchDocuments(q);
+}
+
+public List<DocumentManage> searchDocuments(String q) {
+    UserManager current = getCurrentUser();
+    Integer userId = current.getUserId();
+
+    if (q == null || q.isBlank()) {
+        return documentManageRepository.findByOwner_UserId(userId);
+    }
+
+    return documentManageRepository.findByOwner_UserIdAndTitleContainingIgnoreCase(userId, q);
+}
+
+3) Tighten getDocumentById:
+
+public DocumentManage getDocumentById(Integer id) {
+    DocumentManage doc = documentManageRepository
+            .findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+
+    UserManager current = getCurrentUser();
+    boolean isOwner = doc.getOwner() != null && doc.getOwner().getUserId().equals(current.getUserId());
+
+    if (!isOwner) {
+        throw new IllegalArgumentException("Document not found with id: " + id);
+    }
+
+    return doc;
+}
+
+================================================================
+D) SCOPE FOLDER LIST TO CURRENT USER
+================================================================
+1) Add in FolderManagerRepository:
+
+List<FolderManager> findByOwner_UserId(Integer userId);
+
+2) In FolderManagerService:
+
+public List<FolderManager> getAllFolders() {
+    UserManager current = getCurrentUser();
+    return folderManagerRepository.findByOwner_UserId(current.getUserId());
+}
+
+public FolderManager getFolderById(Integer id) {
+    FolderManager folder = folderManagerRepository
+            .findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + id));
+
+    UserManager current = getCurrentUser();
+    boolean isOwner = folder.getOwner() != null && folder.getOwner().getUserId().equals(current.getUserId());
+
+    if (!isOwner) {
+        throw new IllegalArgumentException("Folder not found with id: " + id);
+    }
+
+    return folder;
+}
+
+================================================================
+E) GET CURRENT USER HELPER (IF MISSING)
+================================================================
+Add this helper in document/folder services where needed:
+
+private UserManager getCurrentUser() {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth == null || !(auth.getPrincipal() instanceof UserManager user)) {
+        throw new IllegalArgumentException("Unauthorized");
+    }
+    return user;
+}
+
+Required imports:
+- org.springframework.security.core.Authentication
+- org.springframework.security.core.context.SecurityContextHolder
+
+================================================================
+F) RUN CHECKS AFTER CHANGES
+================================================================
+1) Restart backend.
+2) Login as user A.
+3) GET /api/v1/documents -> only user A docs.
+4) GET /api/v1/folders -> only user A folders.
+5) PATCH /api/v1/documents/{id}/move with body {"folder_id": <own folder>} -> works.
+6) Try moving to another user folder -> should fail.
+
+================================================================
+G) TITLE CASE STATUS/ACCESS NOTE
+================================================================
+Keep these values to satisfy current DB check constraints:
+- status: Pending, Approved, Rejected
+- access_type: Owner, Editor, Viewer
+
+================================================================
+H) CLARIFICATION ABOUT getCurrentUser()
+================================================================
+`getCurrentUser()` is NOT a method inside UserManager entity.
+It is a helper method you add inside service classes (for example DocumentManageService and FolderManagerService).
+
+For your current security setup, this exact helper is valid because JwtAuthenticationFilter stores UserManager as principal:
+
+private UserManager getCurrentUser() {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth == null || !(auth.getPrincipal() instanceof UserManager user)) {
+        throw new IllegalArgumentException("Unauthorized");
+    }
+    return user;
+}
+
+Why this works in your codebase:
+- In JwtAuthenticationFilter, you build UsernamePasswordAuthenticationToken with principal = user (UserManager object).
+
+Fallback-safe variant (optional):
+- If later your principal becomes a String email or UserDetails, load UserManager from UserManagerRepository by email.

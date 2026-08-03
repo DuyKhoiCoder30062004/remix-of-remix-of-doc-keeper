@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { MoreHorizontal } from "lucide-react";
 import { usersApi, apiErrorMessage } from "@/lib/api";
@@ -15,6 +15,7 @@ function AdminPanel() {
   const { isAdmin, loading } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [q, setQ] = useState("");
 
   useEffect(() => {
     if (!loading && !isAdmin) navigate({ to: "/" });
@@ -25,6 +26,16 @@ function AdminPanel() {
     queryFn: () => usersApi.list(),
     enabled: isAdmin,
   });
+
+  const filteredUsers = useMemo(() => {
+    const needle = q.toLowerCase();
+    return users.filter(
+      (u) =>
+        !needle ||
+        u.name.toLowerCase().includes(needle) ||
+        u.email.toLowerCase().includes(needle)
+    );
+  }, [users, q]);
 
   const adminCount = users.filter((u) => u.role === "ADMIN").length;
   const userCount = users.filter((u) => u.role === "USER").length;
@@ -50,7 +61,11 @@ function AdminPanel() {
   }
 
   return (
-    <AppShell searchPlaceholder="Search users...">
+    <AppShell 
+      searchPlaceholder="Search users..."
+      searchValue={q}
+      onSearchChange={setQ}
+    >
       <section className="py-12 px-8">
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="flex justify-between items-end">
@@ -88,7 +103,7 @@ function AdminPanel() {
           </div>
 
           <div className="space-y-2">
-            {users.map((u) => (
+            {filteredUsers.map((u) => (
               <div
                 key={u.user_id}
                 className="flex items-center justify-between p-4 bg-background ring-1 ring-border rounded-xl hover:bg-secondary/40 transition-colors"

@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { LayoutGrid, Upload, FolderTree, Shield, Search, Plus, LogOut } from "lucide-react";
+import { LayoutGrid, Upload, FolderTree, Shield, Search, Plus, LogOut, Share2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -8,6 +8,7 @@ const nav = [
   { to: "/", label: "Dashboard", icon: LayoutGrid },
   { to: "/folders", label: "Folders", icon: FolderTree },
   { to: "/upload", label: "Upload", icon: Upload },
+  { to: "/sharing-requests", label: "Sharing Requests", icon: Share2 },
   { to: "/admin", label: "Admin Panel", icon: Shield, adminOnly: true },
 ] as const;
 

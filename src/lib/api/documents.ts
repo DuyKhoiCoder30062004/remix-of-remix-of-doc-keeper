@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { AuditLogEntry, DocumentMeta } from "./types";
+import { rememberUploadedSize } from "@/lib/document-metadata";
 
 // Endpoints under /api/v1/documents
 export const documentsApi = {
@@ -38,6 +39,7 @@ export const documentsApi = {
         }
       },
     });
+    rememberUploadedSize(data, input.file.size);
     return data;
   },
 

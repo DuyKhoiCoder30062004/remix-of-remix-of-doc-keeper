@@ -1,0 +1,134 @@
+SWAGGER + ACTUATOR AUTHORIZATION PROMPT - DIAGNOSIS AND FIX GUIDE
+
+Goal:
+- Explain why localhost:8080, swagger-ui, and actuator keep asking for authorization.
+- Provide safe configuration options and test steps.
+- No code applied automatically in this guide.
+
+================================================================
+1) DIAGNOSIS (WHY THIS HAPPENS)
+================================================================
+Your current security chain effectively says:
+- permit only auth endpoints (/api/v1/auth/login, /register, /password/**)
+- permit OPTIONS
+- require authentication for everything else
+
+So these paths are protected by default:
+- /swagger-ui/**
+- /v3/api-docs/**
+- /actuator/**
+- /
+
+Result:
+- Browser gets 401 from backend for those endpoints.
+- Swagger UI cannot fetch /v3/api-docs without token, so it keeps prompting authorize.
+- Actuator endpoints also require auth unless explicitly opened.
+
+================================================================
+2) QUICK CONFIRMATION CHECKLIST (READ-ONLY TEST)
+================================================================
+Run these and check status codes:
+
+1) curl -i http://localhost:8080/swagger-ui/index.html
+2) curl -i http://localhost:8080/v3/api-docs
+3) curl -i http://localhost:8080/actuator/health
+4) curl -i http://localhost:8080/
+
+Interpretation:
+- 401 on items 2-4 confirms current anyRequest().authenticated() is covering them.
+- If item 1 loads but item 2 is 401, Swagger page renders but schema fetch fails (common case).
+
+================================================================
+3) CONFIGURATION OPTIONS
+================================================================
+Option A (dev-friendly): public Swagger docs + public actuator health/info only
+- Best for local testing with minimal exposure.
+
+Permit these:
+- /swagger-ui/**
+- /swagger-ui.html
+- /v3/api-docs/**
+- /v3/api-docs.yaml
+- /actuator/health
+- /actuator/info
+
+Keep protected:
+- all other /actuator/**
+- all business APIs except auth endpoints
+
+Option B (fully public actuator in local only)
+- Fastest for diagnostics, but less secure.
+
+Permit these additionally:
+- /actuator/**
+
+================================================================
+4) EXACT SECURITY MATCHER TEMPLATE
+================================================================
+Inside authorizeHttpRequests(...), use this ordering:
+
+.requestMatchers(
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/password/**",
+    "/swagger-ui/**",
+    "/swagger-ui.html",
+    "/v3/api-docs/**",
+    "/v3/api-docs.yaml",
+    "/actuator/health",
+    "/actuator/info"
+).permitAll()
+.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+.anyRequest().authenticated()
+
+If you choose Option B, add:
+.requestMatchers("/actuator/**").permitAll()
+
+Place this BEFORE .anyRequest().authenticated().
+
+================================================================
+5) SWAGGER AUTHORIZE WORKFLOW (JWT)
+================================================================
+After backend restart:
+
+1) Open /swagger-ui/index.html
+2) Call /api/v1/auth/login to get token
+3) Click Authorize
+4) Paste token in bearer format:
+   Bearer <your_jwt_token>
+5) Call protected endpoints
+down in postman, it can run, if the token is validated for that account
+if not, it doesnt do anything on the browser part.
+Note:
+- Some Swagger setups expect token without Bearer prefix.
+- If calls still return 401, try both formats and inspect request header actually sent.
+
+================================================================
+6) IF BROWSER PROMPTS FOR CREDENTIALS KEEP APPEARING
+================================================================
+Possible reasons:
+1) Endpoint still returns WWW-Authenticate challenge.
+2) A different SecurityConfig is active at runtime.
+3) Reverse proxy / gateway adds its own auth challenge.
+
+Checks:
+- Confirm there is only one active Spring Security configuration.
+- Verify app restarted from the same project where config was edited.
+- Inspect response headers for WWW-Authenticate.
+
+================================================================
+7) SAFE PRODUCTION RECOMMENDATION
+================================================================
+For production:
+- Keep Swagger protected or disabled.
+- Keep only /actuator/health public (if needed for health checks).
+- Protect all other actuator endpoints.
+
+================================================================
+8) FINAL VERIFICATION AFTER CHANGES
+================================================================
+Expected behavior:
+- /swagger-ui/index.html opens without backend 401 loops.
+- /v3/api-docs returns 200.
+- /actuator/health returns 200 (public if configured).
+- Protected business endpoints still require JWT.

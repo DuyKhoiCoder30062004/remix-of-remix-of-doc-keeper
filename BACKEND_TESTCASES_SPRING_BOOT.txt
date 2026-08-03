@@ -1,0 +1,791 @@
+SPRING BOOT BACKEND TESTCASES
+
+This file is based on the newest backend code you pasted.
+It includes:
+- unit tests
+- repository tests
+- controller integration tests
+- end-to-end behavior checks for document, folder, permission, and sharing flows
+
+Recommended stack:
+- JUnit 5
+- Mockito
+- Spring Boot Test
+- MockMvc
+- AssertJ
+- H2 for fast test slices, or PostgreSQL Testcontainers if you want DB parity
+
+================================================================
+0) TEST DEPENDENCIES
+================================================================
+
+If not already present, ensure your build includes:
+
+- spring-boot-starter-test
+- mockito-core
+- spring-security-test
+
+Optional but recommended:
+- org.testcontainers:junit-jupiter
+- org.testcontainers:postgresql
+
+================================================================
+1) TEST STRUCTURE
+================================================================
+
+Suggested packages:
+
+src/test/java/com/saigontechnologyintern/document_management/
+  authManagement/
+  documentManagement/
+  folderManagement/
+  permissionManagement/
+  sharingRequestManagement/
+
+Suggested files:
+
+1. DocumentManageServiceTest
+2. FolderManagerServiceTest
+3. PermissionManagerServiceTest
+4. SharingRequestManagerServiceTest
+5. DocumentManageControllerIntegrationTest
+6. FolderManagerControllerIntegrationTest
+7. SharingRequestManagerControllerIntegrationTest
+8. PermissionManagerControllerIntegrationTest
+
+================================================================
+2) UNIT TESTS - DOCUMENTMANAGESERVICE
+================================================================
+
+Create: DocumentManageServiceTest
+
+Main cases to cover:
+
+1. getDocuments returns all visible docs when no folderId and no q
+2. getDocuments uses filtered repository method when folderId exists
+3. searchDocuments uses filtered repository method when q exists
+4. getDocumentById allows owner
+5. getDocumentById allows shared recipient with permission row
+6. getDocumentById throws when user has no access
+7. createDocument saves owner and owner permission row
+8. createDocument throws when target folder belongs to another user
+9. updateDocument allows rename for Owner
+10. updateDocument allows rename for Editor
+11. updateDocument rejects rename for Viewer
+12. updateDocument rejects folder move for non-owner
+13. moveDocument allows owner move to owned folder
+14. moveDocument rejects move for non-owner
+15. deleteDocumentById allows owner
+16. deleteDocumentById rejects non-owner
+
+Example skeleton:
+
+```java
+package com.saigontechnologyintern.document_management.documentManagement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.saigontechnologyintern.document_management.folderManagement.FolderManager;
+import com.saigontechnologyintern.document_management.folderManagement.FolderManagerRepository;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManager;
+import com.saigontechnologyintern.document_management.permissionManagement.PermissionManagerRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
+
+@ExtendWith(MockitoExtension.class)
+class DocumentManageServiceTest {
+
+  @Mock private DocumentManageRepository documentManageRepository;
+  @Mock private FolderManagerRepository folderManagerRepository;
+  @Mock private UserManagerRepository userManagerRepository;
+  @Mock private PermissionManagerRepository permissionManagerRepository;
+
+  @InjectMocks private DocumentManageService service;
+
+  private UserManager owner;
+  private DocumentManage document;
+
+  @BeforeEach
+  void setUp() {
+    owner = new UserManager();
+    owner.setUserId(1);
+    owner.setName("Owner");
+    owner.setEmail("owner@test.com");
+    owner.setRole("User");
+
+    document = new DocumentManage();
+    document.setDocId(10);
+    document.setTitle("Spec");
+    document.setOwner(owner);
+    document.setMetadata(Map.of("mime_type", "text/plain"));
+  }
+
+  @Test
+  void getDocuments_withoutFilters_returnsVisibleDocuments() {
+    when(documentManageRepository.findVisibleDocumentsForUser(1)).thenReturn(List.of(document));
+
+    List<DocumentManage> result = service.getDocuments(1, null, null);
+
+    assertThat(result).hasSize(1);
+    verify(documentManageRepository).findVisibleDocumentsForUser(1);
+  }
+
+  @Test
+  void getDocumentById_ownerCanView() {
+    when(documentManageRepository.findById(10)).thenReturn(Optional.of(document));
+
+    DocumentManage result = service.getDocumentById(10, 1);
+
+    assertThat(result).isSameAs(document);
+  }
+
+  @Test
+  void getDocumentById_sharedUserWithPermissionCanView() {
+    UserManager recipient = new UserManager();
+    recipient.setUserId(2);
+
+    PermissionManager permission = new PermissionManager();
+    permission.setAccessType("Viewer");
+    permission.setDocument(document);
+    permission.setUser(recipient);
+
+    when(documentManageRepository.findById(10)).thenReturn(Optional.of(document));
+    when(permissionManagerRepository.findByDocument_DocIdAndUser_UserId(10, 2))
+        .thenReturn(Optional.of(permission));
+
+    DocumentManage result = service.getDocumentById(10, 2);
+
+    assertThat(result).isSameAs(document);
+  }
+
+  @Test
+  void getDocumentById_userWithoutPermissionThrows() {
+    when(documentManageRepository.findById(10)).thenReturn(Optional.of(document));
+    when(permissionManagerRepository.findByDocument_DocIdAndUser_UserId(10, 2))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.getDocumentById(10, 2))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Document not found");
+  }
+
+  @Test
+  void createDocument_createsOwnerPermissionRow() throws Exception {
+    MockMultipartFile file = new MockMultipartFile(
+        "file", "demo.txt", "text/plain", "hello".getBytes());
+
+    when(userManagerRepository.findById(1)).thenReturn(Optional.of(owner));
+    when(documentManageRepository.save(any(DocumentManage.class))).thenAnswer(inv -> {
+      DocumentManage saved = inv.getArgument(0);
+      saved.setDocId(100);
+      return saved;
+    });
+    when(permissionManagerRepository.findByDocument_DocIdAndUser_UserId(100, 1))
+        .thenReturn(Optional.empty());
+
+    DocumentManage saved = service.createDocument(file, null, "demo", 1);
+
+    assertThat(saved.getDocId()).isEqualTo(100);
+    verify(permissionManagerRepository).save(any(PermissionManager.class));
+  }
+}
+```
+
+================================================================
+3) UNIT TESTS - FOLDERMANAGERSERVICE
+================================================================
+
+Create: FolderManagerServiceTest
+
+Main cases:
+
+1. getAllFolders returns only current user folders
+2. getFolderById allows owner
+3. getFolderById rejects non-owner
+4. createFolder sets owner correctly
+5. updateFolder renames owned folder
+6. deleteFolderById allows owner
+7. deleteFolderById rejects non-owner
+
+Example assertions:
+
+```java
+@Test
+void getFolderById_nonOwnerThrows() {
+  FolderManager folder = new FolderManager();
+  UserManager owner = new UserManager();
+  owner.setUserId(1);
+  folder.setOwner(owner);
+
+  when(folderManagerRepository.findById(10)).thenReturn(Optional.of(folder));
+
+  assertThatThrownBy(() -> service.getFolderById(10, 2))
+      .isInstanceOf(IllegalArgumentException.class)
+      .hasMessageContaining("Folder not found");
+}
+```
+
+================================================================
+4) UNIT TESTS - PERMISSIONMANAGERSERVICE
+================================================================
+
+Create: PermissionManagerServiceTest
+
+Main cases:
+
+1. getPermissions with docId + userId returns one-item list or empty list
+2. getPermissions with docId only returns document permissions
+3. getPermissions with userId only returns user permissions
+4. getPermissions without filters returns all
+5. createPermission persists normalized access type
+6. updatePermission normalizes access type correctly
+7. deletePermissionById deletes existing row
+8. deletePermissionById throws when id missing
+
+Important bug to catch in your current code:
+- normalizeAccessType uses toUpperCase but compares with Title-Case strings
+- this will always fall back to Viewer
+
+Add a failing test first:
+
+```java
+@Test
+void updatePermission_editorShouldStayEditor() {
+  PermissionManager permission = new PermissionManager();
+  permission.setPermId(1);
+  permission.setAccessType("Viewer");
+
+  when(permissionManagerRepository.findById(1)).thenReturn(Optional.of(permission));
+  when(permissionManagerRepository.save(any(PermissionManager.class))).thenAnswer(inv -> inv.getArgument(0));
+
+  PermissionManager updated = service.updatePermission(1, "Editor");
+
+  assertThat(updated.getAccessType()).isEqualTo("Editor");
+}
+```
+
+If this test fails and returns Viewer, your normalizeAccessType bug is confirmed.
+
+================================================================
+5) UNIT TESTS - SHARINGREQUESTMANAGERSERVICE
+================================================================
+
+Create: SharingRequestManagerServiceTest
+
+Main cases:
+
+1. createSharingRequest allows owner
+2. createSharingRequest rejects non-owner
+3. createSharingRequest stores Pending status
+4. createSharingRequest stores normalized permission
+5. getIncomingRequests filters by recipient user id
+6. approveSharingRequest allows recipient only
+7. approveSharingRequest creates permission row if missing
+8. approveSharingRequest updates permission row if exists
+9. rejectSharingRequest allows recipient only
+10. rejectSharingRequest rejects other users
+11. normalizeStatus maps pending/approved/rejected correctly
+12. normalizeAccessType maps owner/editor/viewer correctly
+
+Example skeleton:
+
+```java
+@Test
+void approveSharingRequest_recipientOnly() {
+  UserManager recipient = new UserManager();
+  recipient.setUserId(2);
+
+  SharingRequestManager request = new SharingRequestManager();
+  request.setRequestId(5);
+  request.setRequester(recipient);
+  request.setDocument(document);
+  request.setPermission("Editor");
+
+  when(sharingRequestManagerRepository.findById(5)).thenReturn(Optional.of(request));
+  when(sharingRequestManagerRepository.save(any(SharingRequestManager.class))).thenAnswer(inv -> inv.getArgument(0));
+  when(permissionManagerRepository.findByDocument_DocIdAndUser_UserId(10, 2)).thenReturn(Optional.empty());
+
+  SharingRequestManager approved = service.approveSharingRequest(5, 2);
+
+  assertThat(approved.getStatus()).isEqualTo("Approved");
+  verify(permissionManagerRepository).save(any(PermissionManager.class));
+}
+```
+
+================================================================
+6) REPOSITORY TESTS
+================================================================
+
+Use @DataJpaTest for repository verification.
+
+Create: DocumentManageRepositoryTest
+
+Main cases:
+
+1. findVisibleDocumentsForUser returns owned docs
+2. findVisibleDocumentsForUser returns shared docs with Viewer permission
+3. findVisibleDocumentsForUserFiltered filters by folderId
+4. findVisibleDocumentsForUserFiltered filters by q
+5. findVisibleDocumentsForUserFiltered returns empty for unmatched folderId
+
+Critical note for your current repository:
+- your newest pasted query is wrong:
+
+AND (:q LIKE LOWER(CONCAT('%', :q, '%')))
+
+It should be:
+
+AND (:q IS NULL OR LOWER(d.title) LIKE LOWER(CONCAT('%', :q, '%')))
+
+Write a repository test specifically for title search so this bug is caught.
+
+Example:
+
+```java
+@DataJpaTest
+class DocumentManageRepositoryTest {
+
+  @Autowired private DocumentManageRepository repository;
+  @Autowired private TestEntityManager em;
+
+  @Test
+  void findVisibleDocumentsForUserFiltered_filtersByTitle() {
+    UserManager owner = new UserManager("A", "a@test.com", "pw", "User");
+    em.persist(owner);
+
+    DocumentManage doc = new DocumentManage();
+    doc.setTitle("Quarterly Plan");
+    doc.setOwner(owner);
+    em.persist(doc);
+    em.flush();
+
+    List<DocumentManage> result = repository.findVisibleDocumentsForUserFiltered(owner.getUserId(), null, "plan");
+
+    assertThat(result).extracting(DocumentManage::getTitle).contains("Quarterly Plan");
+  }
+}
+```
+
+Create: PermissionManagerRepositoryTest
+
+Main cases:
+
+1. findByDocument_DocId returns all permissions for doc
+2. findByUser_UserId returns all permissions for user
+3. findByDocument_DocIdAndUser_UserId returns exact permission
+
+Create: SharingRequestManagerRepositoryTest
+
+Main cases:
+
+1. findByRequester_UserId returns recipient requests
+2. findByRequester_UserIdAndStatus filters by normalized status
+3. findByStatusAndDocument_DocId returns admin query results
+
+================================================================
+7) CONTROLLER INTEGRATION TESTS WITH MOCKMVC
+================================================================
+
+Use @SpringBootTest + @AutoConfigureMockMvc.
+
+You will likely need:
+- valid JWT generation in test setup
+- test users inserted into test DB
+
+Create: DocumentManageControllerIntegrationTest
+
+Main cases:
+
+1. GET /api/v1/documents returns 401 without token
+2. GET /api/v1/documents returns visible docs for owner
+3. GET /api/v1/documents?folder_id=... returns docs moved into that folder
+4. PATCH /api/v1/documents/{id}/move moves document for owner
+5. PATCH /api/v1/documents/{id}/move returns error for non-owner
+6. GET /api/v1/documents/{id} returns 400 or 404 for unauthorized viewer
+7. GET /api/v1/documents/{id}/download returns file bytes for allowed user
+
+Example skeleton:
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+class DocumentManageControllerIntegrationTest {
+
+  @Autowired private MockMvc mockMvc;
+  @Autowired private JwtService jwtService;
+  @Autowired private UserManagerRepository userRepository;
+  @Autowired private FolderManagerRepository folderRepository;
+  @Autowired private DocumentManageRepository documentRepository;
+
+  @Test
+  void moveDocument_thenListByFolder_shouldContainMovedDocument() throws Exception {
+    UserManager owner = userRepository.save(new UserManager("Owner", "owner@test.com", "pw", "User"));
+    FolderManager folder = new FolderManager("Specs", owner);
+    folder = folderRepository.save(folder);
+
+    DocumentManage doc = new DocumentManage();
+    doc.setTitle("Proposal");
+    doc.setOwner(owner);
+    doc = documentRepository.save(doc);
+
+    String token = jwtService.generateToken(owner);
+
+    mockMvc.perform(patch("/api/v1/documents/{id}/move", doc.getDocId())
+            .header("Authorization", "Bearer " + token)
+            .contentType("application/json")
+            .content("{" + "\"folder_id\":" + folder.getFolderId() + "}"))
+        .andExpect(status().isOk());
+
+    mockMvc.perform(get("/api/v1/documents")
+            .header("Authorization", "Bearer " + token)
+            .param("folder_id", String.valueOf(folder.getFolderId())))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Proposal")));
+  }
+}
+```
+
+Create: FolderManagerControllerIntegrationTest
+
+Main cases:
+
+1. GET /api/v1/folders returns only current user folders
+2. GET /api/v1/folders/{id} rejects non-owner
+3. POST /api/v1/folders creates folder with current user owner
+4. PATCH /api/v1/folders/{id} renames owned folder
+5. DELETE /api/v1/folders/{id} deletes owned folder
+
+Create: PermissionManagerControllerIntegrationTest
+
+Main cases:
+
+1. GET /api/v1/permissions returns all when no filters
+2. GET /api/v1/permissions?doc_id=... filters by doc
+3. GET /api/v1/permissions?user_id=... filters by user
+4. GET /api/v1/permissions?doc_id=...&user_id=... returns one row
+5. POST creates permission
+6. PATCH updates permission access type
+7. DELETE removes permission
+
+Create: SharingRequestManagerControllerIntegrationTest
+
+Main cases:
+
+1. POST /api/v1/sharing-requests creates pending request
+2. non-owner cannot create share request
+3. recipient can approve request
+4. sender cannot approve recipient request
+5. recipient can reject request
+6. GET /api/v1/sharing-requests returns incoming requests for normal user
+7. GET /api/v1/sharing-requests returns all requests for admin
+
+================================================================
+8) FULL INTEGRATION SCENARIOS
+================================================================
+
+These are the highest-value end-to-end scenarios.
+
+Scenario A: Upload then move into folder
+
+1. create user A
+2. create folder F owned by A
+3. upload document D owned by A
+4. move D into F
+5. GET /documents?folder_id=F should include D
+
+Expected:
+- status 200 throughout
+- moved document appears in folder-scoped list
+
+Scenario B: Share as Editor then rename
+
+1. create users A and B
+2. A uploads document D
+3. A creates sharing request for B as Editor
+4. B approves request
+5. B GET /documents should include D
+6. B PATCH /documents/{id} rename should succeed
+7. B PATCH /documents/{id}/move should fail
+
+Scenario C: Share as Viewer then download only
+
+1. create users A and C
+2. A uploads document D
+3. A shares D to C as Viewer
+4. C approves request
+5. C GET /documents/{id} should work
+6. C GET /documents/{id}/download should work
+7. C PATCH /documents/{id} should fail
+8. C PATCH /documents/{id}/move should fail
+
+Scenario D: Folder ownership enforcement
+
+1. user A creates folder F1
+2. user B creates folder F2
+3. A uploads document D
+4. A tries moving D into F2
+
+Expected:
+- move rejected with message about own folders only
+
+================================================================
+9) BUG-FOCUSED TESTS YOU SHOULD WRITE FIRST
+================================================================
+
+Write these first because they target your current known risks.
+
+1. Repository title filter test
+- catches malformed q predicate in findVisibleDocumentsForUserFiltered
+
+2. Permission normalization test
+- catches current toUpperCase bug in PermissionManagerService.normalizeAccessType
+
+3. Move then folder list integration test
+- catches the exact problem you reported: moved file does not appear after clicking target folder
+
+4. Recipient-only approve test
+- ensures sender cannot approve their own outgoing share request
+
+================================================================
+10) KNOWN CODE ISSUES THESE TESTS SHOULD EXPOSE
+================================================================
+
+1. DocumentManageRepository query bug
+Current broken predicate:
+
+AND (:q LIKE LOWER(CONCAT('%', :q, '%')))
+
+Correct predicate:
+
+AND (:q IS NULL OR LOWER(d.title) LIKE LOWER(CONCAT('%', :q, '%')))
+
+2. PermissionManagerService normalization bug
+Current code:
+
+String value = raw.trim().toUpperCase();
+if (!"Owner".equals(value) && !"Editor".equals(value) && !"Viewer".equals(value)) {
+    return "Viewer";
+}
+
+This will incorrectly map Editor/Owner/Viewer to Viewer.
+
+Correct logic:
+
+String value = raw.trim().toLowerCase();
+if ("owner".equals(value)) return "Owner";
+if ("editor".equals(value)) return "Editor";
+if ("viewer".equals(value)) return "Viewer";
+return "Viewer";
+
+================================================================
+11) MINIMUM PASSING TEST SET
+================================================================
+
+If you want the smallest useful set first, write these 8 tests:
+
+1. DocumentManageServiceTest.getDocumentById_ownerCanView
+2. DocumentManageServiceTest.moveDocument_ownerCanMoveToOwnedFolder
+3. DocumentManageRepositoryTest.findVisibleDocumentsForUserFiltered_filtersByFolder
+4. DocumentManageRepositoryTest.findVisibleDocumentsForUserFiltered_filtersByTitle
+5. PermissionManagerServiceTest.updatePermission_editorShouldStayEditor
+6. SharingRequestManagerServiceTest.approveSharingRequest_recipientOnly
+7. DocumentManageControllerIntegrationTest.moveDocument_thenListByFolder_shouldContainMovedDocument
+8. SharingRequestManagerControllerIntegrationTest.senderCannotApproveRecipientRequest
+
+================================================================
+12) FINAL RECOMMENDATION
+================================================================
+
+Before writing many tests, fix these two code issues first or expect failures:
+
+1. Fix DocumentManageRepository.findVisibleDocumentsForUserFiltered q predicate
+2. Fix PermissionManagerService.normalizeAccessType
+
+After that, run:
+- service unit tests first
+- repository tests second
+- controller integration tests third
+
+That order will isolate failures faster.
+
+================================================================
+13) DIAGNOSTIC PATCH FOR UPLOAD/MOVE AUTHORIZATION
+================================================================
+
+Use this patch in your real backend code to reveal the exact reason for
+"unauthorized" during upload-to-folder and move-to-folder.
+
+13.1 DocumentManageService: add helper
+
+```java
+private boolean isAdmin(UserManager user) {
+  return user != null && user.getRole() != null && "ADMIN".equalsIgnoreCase(user.getRole());
+}
+```
+
+13.2 Replace createDocument with diagnostics (and optional admin bypass)
+
+```java
+public DocumentManage createDocument(MultipartFile file, Integer folderId, String title, Integer currentUserId) {
+  try {
+    UserManager actor = userManagerRepository
+        .findById(currentUserId)
+        .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + currentUserId));
+
+    DocumentManage document = new DocumentManage();
+    document.setOwner(actor);
+
+    String originalFilename = file.getOriginalFilename();
+    String resolvedTitle = (title != null && !title.isBlank()) ? title : originalFilename;
+    document.setTitle(resolvedTitle != null ? resolvedTitle : "Untitled");
+
+    String extension = "FILE";
+    if (originalFilename != null && originalFilename.contains(".")) {
+      extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toUpperCase();
+    }
+
+    String mime = (file.getContentType() == null || file.getContentType().isBlank())
+        ? "application/octet-stream"
+        : file.getContentType();
+
+    document.setMetadata(Map.of(
+        "extension", extension,
+        "mime_type", mime,
+        "size_bytes", file.getSize()));
+    document.setOriginalFilename(originalFilename);
+    document.setContentType(mime);
+    document.setFileData(file.getBytes());
+
+    if (folderId != null) {
+      FolderManager folder = folderManagerRepository.findById(folderId)
+          .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+      Integer folderOwnerId = folder.getOwner() != null ? folder.getOwner().getUserId() : null;
+      boolean ownerMatch = folderOwnerId != null && folderOwnerId.equals(currentUserId);
+      boolean adminBypass = isAdmin(actor); // set false if you do not want admin bypass
+
+      if (!ownerMatch && !adminBypass) {
+        throw new IllegalArgumentException(
+            "Upload denied: actor=" + currentUserId
+                + ", role=" + actor.getRole()
+                + ", folder_id=" + folderId
+                + ", folder_owner=" + folderOwnerId);
+      }
+
+      document.setFolder(folder);
+    }
+
+    DocumentManage saved = documentManageRepository.save(document);
+
+    permissionManagerRepository.findByDocument_DocIdAndUser_UserId(saved.getDocId(), currentUserId)
+        .ifPresentOrElse(
+            p -> {
+              p.setAccessType("Owner");
+              permissionManagerRepository.save(p);
+            },
+            () -> {
+              PermissionManager p = new PermissionManager();
+              p.setDocument(saved);
+              p.setUser(actor);
+              p.setAccessType("Owner");
+              permissionManagerRepository.save(p);
+            }
+        );
+
+    return saved;
+  } catch (IOException e) {
+    throw new RuntimeException("Failed to read uploaded file content", e);
+  }
+}
+```
+
+13.3 Replace moveDocument with diagnostics (and optional admin bypass)
+
+```java
+public DocumentManage moveDocument(Integer id, Integer folderId, Integer currentUserId) {
+  if (folderId == null) {
+    throw new IllegalArgumentException("folder_id is required");
+  }
+
+  UserManager actor = userManagerRepository
+      .findById(currentUserId)
+      .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + currentUserId));
+
+  DocumentManage doc = documentManageRepository
+      .findById(id)
+      .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+
+  Integer docOwnerId = doc.getOwner() != null ? doc.getOwner().getUserId() : null;
+  boolean actorIsDocOwner = docOwnerId != null && docOwnerId.equals(currentUserId);
+  boolean adminBypass = isAdmin(actor); // set false if you do not want admin bypass
+
+  if (!actorIsDocOwner && !adminBypass) {
+    throw new IllegalArgumentException(
+        "Move denied (doc ownership): actor=" + currentUserId
+            + ", role=" + actor.getRole()
+            + ", doc_id=" + id
+            + ", doc_owner=" + docOwnerId);
+  }
+
+  FolderManager target = folderManagerRepository
+      .findById(folderId)
+      .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+  Integer folderOwnerId = target.getOwner() != null ? target.getOwner().getUserId() : null;
+  boolean actorOwnsFolder = folderOwnerId != null && folderOwnerId.equals(currentUserId);
+
+  if (!actorOwnsFolder && !adminBypass) {
+    throw new IllegalArgumentException(
+        "Move denied (folder ownership): actor=" + currentUserId
+            + ", role=" + actor.getRole()
+            + ", folder_id=" + folderId
+            + ", folder_owner=" + folderOwnerId
+            + ", doc_id=" + id
+            + ", doc_owner=" + docOwnerId);
+  }
+
+  doc.setFolder(target);
+  return documentManageRepository.save(doc);
+}
+```
+
+13.4 Optional: return 403 for permission failures
+
+In DocumentManageController, add this:
+
+```java
+@ExceptionHandler(IllegalArgumentException.class)
+public ResponseEntity<java.util.Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+  String message = ex.getMessage() == null ? "Bad request" : ex.getMessage();
+
+  // Permission-style failures become 403 for easier frontend diagnosis
+  if (message.startsWith("Move denied") || message.startsWith("Upload denied")
+      || message.contains("do not have permission") || message.contains("only upload") || message.contains("only move")) {
+    return ResponseEntity.status(403).body(java.util.Map.of("message", message));
+  }
+
+  return ResponseEntity.badRequest().body(java.util.Map.of("message", message));
+}
+```
+
+13.5 What to verify after patch
+
+1. Move a doc and inspect response body message if it fails.
+2. Confirm actor id equals both document owner and target folder owner under owner-only policy.
+3. If admin should be allowed, keep adminBypass true.
+4. If admin should NOT be allowed, set adminBypass false in both methods.
+

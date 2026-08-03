@@ -319,13 +319,24 @@ export function installMockApi() {
   });
 
   mock.onPost("/sharing-requests").reply((config) => {
-    const { doc_id } = JSON.parse(config.data);
+    const { doc_id, folder_id, user_id, permission } = JSON.parse(config.data);
     const actor = users.find((u) => u.user_id === currentUserId(config)) ?? users[0];
+    const recipient = users.find((u) => u.user_id === user_id);
+    const document = documents.find((d) => d.doc_id === doc_id);
+    const folder = folders.find((f) => f.folder_id === folder_id);
+    
     const req = {
       request_id: uid("sr"),
-      doc_id,
+      doc_id: doc_id || undefined,
+      folder_id: folder_id || undefined,
+      document_title: document?.title,
+      folder_name: folder?.name,
       requester_id: actor.user_id,
       requester_name: actor.name,
+      requester_email: actor.email,
+      owner_id: actor.user_id,
+      owner_name: actor.name,
+      permission: permission || "VIEWER",
       status: "PENDING" as const,
       requested_at: new Date().toISOString(),
     };
@@ -347,14 +358,19 @@ export function installMockApi() {
     const r = sharingRequests.find((x) => x.request_id === id);
     if (!r) return [404, { message: "Request not found" }];
     r.status = "APPROVED";
-    permissions.push({
-      perm_id: uid("p"),
-      doc_id: r.doc_id,
-      user_id: r.requester_id,
-      user_name: r.requester_name,
-      user_email: users.find((u) => u.user_id === r.requester_id)?.email,
-      access_type: "VIEWER",
-    });
+    
+    // Add permission for the recipient
+    if (r.doc_id) {
+      permissions.push({
+        perm_id: uid("p"),
+        doc_id: r.doc_id,
+        user_id: r.requester_id,
+        user_name: r.requester_name,
+        user_email: r.requester_email,
+        access_type: (r.permission === "EDITOR" ? "EDITOR" : r.permission === "OWNER" ? "OWNER" : "VIEWER") as any,
+      });
+    }
+    
     return [200, r];
   });
 

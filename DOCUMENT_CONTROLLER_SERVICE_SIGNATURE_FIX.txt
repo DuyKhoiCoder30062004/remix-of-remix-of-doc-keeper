@@ -1,0 +1,385 @@
+DOCUMENT CONTROLLER + SERVICE SIGNATURE FIX
+
+This fixes the compile errors in the code you pasted.
+
+================================================================
+1) WHY YOU ARE GETTING ERRORS
+================================================================
+Current mismatches:
+1. Controller calls createDocument(file, folderId, title), but service now requires currentUserId.
+2. Controller calls updateDocument(id, document), but service now requires currentUserId.
+3. Controller calls deleteDocumentById(id), but service now requires currentUserId.
+4. Controller download calls getDocumentById(id), but service now requires currentUserId.
+5. Controller has searchDocuments endpoint, but your current service no longer has searchDocuments(String q).
+
+================================================================
+2) REPLACE DocumentManageController WITH THIS
+================================================================
+package com.saigontechnologyintern.document_management.documentManagement;
+
+import com.saigontechnologyintern.document_management.authManagement.AuthService;
+import com.saigontechnologyintern.document_management.authManagement.JwtService;
+import java.util.List;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping("/api/v1/documents")
+@CrossOrigin(origins = "*")
+public class DocumentManageController {
+    private final DocumentManageService documentManageService;
+    private final AuthService authService;
+    private final JwtService jwtService;
+
+    public DocumentManageController(
+            DocumentManageService documentManageService,
+            AuthService authService,
+            JwtService jwtService) {
+        this.documentManageService = documentManageService;
+        this.authService = authService;
+        this.jwtService = jwtService;
+    }
+
+    private String extractToken(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Invalid authorization header");
+        }
+        String token = authHeader.substring(7).trim();
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+        return token;
+    }
+
+    private Integer currentUserIdFromHeader(String authorization) {
+        String token = extractToken(authorization);
+        return authService.getCurrentUser(token).getUserId();
+    }
+
+    @GetMapping
+    public List<DocumentManage> getDocuments(
+            @RequestHeader("Authorization") String authorization,
+            @RequestParam(value = "folder_id", required = false) Integer folderId,
+            @RequestParam(value = "q", required = false) String q) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        return documentManageService.getDocuments(currentUserId, folderId, q);
+    }
+
+    @GetMapping("/search")
+    public List<DocumentManage> searchDocuments(
+            @RequestHeader("Authorization") String authorization,
+            @RequestParam("q") String q) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        return documentManageService.searchDocuments(currentUserId, q);
+    }
+
+    @GetMapping("/{id}")
+    public DocumentManage getDocumentById(
+            @PathVariable Integer id,
+            @RequestHeader("Authorization") String authorization) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        return documentManageService.getDocumentById(id, currentUserId);
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public DocumentManage createDocument(
+            @RequestHeader("Authorization") String authorization,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "folder_id", required = false) Integer folderId,
+            @RequestParam(value = "title", required = false) String title) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        return documentManageService.createDocument(file, folderId, title, currentUserId);
+    }
+
+    @PatchMapping("/{id}")
+    public DocumentManage updateDocument(
+            @PathVariable Integer id,
+            @RequestBody DocumentManage document,
+            @RequestHeader("Authorization") String authorization) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        return documentManageService.updateDocument(id, document, currentUserId);
+    }
+
+    @PatchMapping("/{id}/move")
+    public DocumentManage moveDocument(
+            @PathVariable Integer id,
+            @RequestBody MoveDocumentRequest request,
+            @RequestHeader("Authorization") String authorization) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        return documentManageService.moveDocument(id, request.getFolder_id(), currentUserId);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteDocument(
+            @PathVariable Integer id,
+            @RequestHeader("Authorization") String authorization) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        documentManageService.deleteDocumentById(id, currentUserId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/download")
+    public ResponseEntity<byte[]> downloadDocument(
+            @PathVariable Integer id,
+            @RequestHeader("Authorization") String authorization) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        DocumentManage doc = documentManageService.getDocumentById(id, currentUserId);
+
+        byte[] content = doc.getFileData();
+        if (content == null || content.length == 0) {
+            throw new IllegalArgumentException("No file content stored for document id: " + id);
+        }
+
+        String filename = (doc.getOriginalFilename() != null && !doc.getOriginalFilename().isBlank())
+                ? doc.getOriginalFilename()
+                : doc.getTitle();
+
+        String contentType = (doc.getContentType() != null && !doc.getContentType().isBlank())
+                ? doc.getContentType()
+                : "application/octet-stream";
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(content);
+    }
+
+    @GetMapping("/{id}/audit")
+    public List<String> auditLog(
+            @PathVariable Integer id,
+            @RequestHeader("Authorization") String authorization) {
+
+        Integer currentUserId = currentUserIdFromHeader(authorization);
+        documentManageService.getDocumentById(id, currentUserId);
+        return List.of("placeholder-audit");
+    }
+
+    public static class MoveDocumentRequest {
+        private Integer folder_id;
+
+        public Integer getFolder_id() {
+            return folder_id;
+        }
+
+        public void setFolder_id(Integer folder_id) {
+            this.folder_id = folder_id;
+        }
+    }
+}
+
+================================================================
+3) REPLACE DocumentManageService WITH THIS
+================================================================
+package com.saigontechnologyintern.document_management.documentManagement;
+
+import com.saigontechnologyintern.document_management.folderManagement.FolderManager;
+import com.saigontechnologyintern.document_management.folderManagement.FolderManagerRepository;
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+import com.saigontechnologyintern.document_management.userManagement.UserManagerRepository;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+@Service
+public class DocumentManageService {
+    private final DocumentManageRepository documentManageRepository;
+    private final FolderManagerRepository folderManagerRepository;
+    private final UserManagerRepository userManagerRepository;
+
+    public DocumentManageService(
+            DocumentManageRepository documentManageRepository,
+            FolderManagerRepository folderManagerRepository,
+            UserManagerRepository userManagerRepository) {
+        this.documentManageRepository = documentManageRepository;
+        this.folderManagerRepository = folderManagerRepository;
+        this.userManagerRepository = userManagerRepository;
+    }
+
+    public List<DocumentManage> getDocuments(Integer currentUserId, Integer folderId, String q) {
+        if (folderId != null) {
+            List<DocumentManage> inFolder = documentManageRepository
+                    .findByOwner_UserIdAndFolder_FolderId(currentUserId, folderId);
+
+            if (q == null || q.isBlank()) {
+                return inFolder;
+            }
+
+            String keyword = q.toLowerCase();
+            return inFolder.stream()
+                    .filter(d -> d.getTitle() != null && d.getTitle().toLowerCase().contains(keyword))
+                    .toList();
+        }
+
+        if (q == null || q.isBlank()) {
+            return documentManageRepository.findByOwner_UserId(currentUserId);
+        }
+
+        return documentManageRepository.findByOwner_UserIdAndTitleContainingIgnoreCase(currentUserId, q);
+    }
+
+    public List<DocumentManage> searchDocuments(Integer currentUserId, String q) {
+        if (q == null || q.isBlank()) {
+            return documentManageRepository.findByOwner_UserId(currentUserId);
+        }
+        return documentManageRepository.findByOwner_UserIdAndTitleContainingIgnoreCase(currentUserId, q);
+    }
+
+    public DocumentManage getDocumentById(Integer id, Integer currentUserId) {
+        DocumentManage doc = documentManageRepository
+                .findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+
+        boolean isOwner = doc.getOwner() != null && doc.getOwner().getUserId().equals(currentUserId);
+        if (!isOwner) {
+            throw new IllegalArgumentException("Document not found with id: " + id);
+        }
+
+        return doc;
+    }
+
+    public DocumentManage createDocument(MultipartFile file, Integer folderId, String title, Integer currentUserId) {
+        try {
+            UserManager owner = userManagerRepository
+                    .findById(currentUserId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + currentUserId));
+
+            DocumentManage document = new DocumentManage();
+            document.setOwner(owner);
+
+            String originalFilename = file.getOriginalFilename();
+            String resolvedTitle = (title != null && !title.isBlank()) ? title : originalFilename;
+            document.setTitle(resolvedTitle != null ? resolvedTitle : "Untitled");
+
+            String extension = "FILE";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toUpperCase();
+            }
+
+            String mime = (file.getContentType() == null || file.getContentType().isBlank())
+                    ? "application/octet-stream"
+                    : file.getContentType();
+
+            document.setMetadata(Map.of(
+                    "extension", extension,
+                    "mime_type", mime,
+                    "size_bytes", file.getSize()));
+
+            document.setOriginalFilename(originalFilename);
+            document.setContentType(mime);
+            document.setFileData(file.getBytes());
+
+            if (folderId != null) {
+                FolderManager folder = folderManagerRepository.findById(folderId)
+                        .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+                boolean folderOwnedByCurrent = folder.getOwner() != null
+                        && folder.getOwner().getUserId().equals(currentUserId);
+                if (!folderOwnedByCurrent) {
+                    throw new IllegalArgumentException("You can only upload to your own folders");
+                }
+
+                document.setFolder(folder);
+            }
+
+            return documentManageRepository.save(document);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read uploaded file content", e);
+        }
+    }
+
+    public DocumentManage updateDocument(Integer id, DocumentManage updatedDocument, Integer currentUserId) {
+        DocumentManage existing = getDocumentById(id, currentUserId);
+
+        if (updatedDocument.getTitle() != null) {
+            existing.setTitle(updatedDocument.getTitle());
+        }
+        if (updatedDocument.getMetadata() != null) {
+            existing.setMetadata(updatedDocument.getMetadata());
+        }
+
+        if (updatedDocument.getFolder() != null) {
+            FolderManager target = updatedDocument.getFolder();
+            if (target.getFolderId() == null) {
+                throw new IllegalArgumentException("folder_id is required in folder object");
+            }
+
+            FolderManager realFolder = folderManagerRepository.findById(target.getFolderId())
+                    .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + target.getFolderId()));
+
+            boolean folderOwnedByCurrent = realFolder.getOwner() != null
+                    && realFolder.getOwner().getUserId().equals(currentUserId);
+            if (!folderOwnedByCurrent) {
+                throw new IllegalArgumentException("You can only move to your own folders");
+            }
+
+            existing.setFolder(realFolder);
+        }
+
+        return documentManageRepository.save(existing);
+    }
+
+    public DocumentManage moveDocument(Integer id, Integer folderId, Integer currentUserId) {
+        if (folderId == null) {
+            throw new IllegalArgumentException("folder_id is required");
+        }
+
+        DocumentManage doc = getDocumentById(id, currentUserId);
+
+        FolderManager target = folderManagerRepository
+                .findById(folderId)
+                .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+        boolean folderOwnedByCurrent = target.getOwner() != null
+                && target.getOwner().getUserId().equals(currentUserId);
+        if (!folderOwnedByCurrent) {
+            throw new IllegalArgumentException("You can only move to your own folders");
+        }
+
+        doc.setFolder(target);
+        return documentManageRepository.save(doc);
+    }
+
+    public void deleteDocumentById(Integer id, Integer currentUserId) {
+        DocumentManage existing = getDocumentById(id, currentUserId);
+        documentManageRepository.delete(existing);
+    }
+}
+
+================================================================
+4) DOCUMENT REPOSITORY (KEEP AS IS)
+================================================================
+package com.saigontechnologyintern.document_management.documentManagement;
+
+import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface DocumentManageRepository extends JpaRepository<DocumentManage, Integer> {
+    List<DocumentManage> findByOwner_UserId(Integer userId);
+    List<DocumentManage> findByOwner_UserIdAndFolder_FolderId(Integer userId, Integer folderId);
+    List<DocumentManage> findByOwner_UserIdAndTitleContainingIgnoreCase(Integer userId, String title);
+}
+
+================================================================
+5) EXTRA CHECK
+================================================================
+If you still see unexpected endpoints, disable old root-level module:
+- com.saigontechnologyintern.document_management.DocumentManager
+- com.saigontechnologyintern.document_management.DocumentManagerController
+
+27/7/2026
+Setup DBeaver, Uninstall PGadmin4, 
+Sharing-Requests & Permissions

@@ -1,0 +1,81 @@
+HOW TO CONNECT FRONTEND TO SPRING BOOT BACKEND
+================================================
+
+STEP 1 — Create .env.local in the project root
+-----------------------------------------------
+Create a new file named exactly: .env.local
+Put this inside:
+
+    VITE_USE_MOCK=false
+
+This tells the frontend to stop using mock data and send real HTTP requests to localhost:8080.
+
+
+STEP 2 — Make sure Spring Boot is running on port 8080
+-------------------------------------------------------
+Start your Spring Boot application. By default it runs on port 8080.
+The frontend will call: http://localhost:8080/api/v1/...
+
+
+STEP 3 — Enable CORS in Spring Boot
+-------------------------------------
+The frontend runs on a different port (usually 5173), so Spring Boot must allow cross-origin requests.
+
+In your Spring Boot project, add this to your main config or a new file:
+
+    @Configuration
+    public class CorsConfig implements WebMvcConfigurer {
+        @Override
+        public void addCorsMappings(CorsRegistry registry) {
+            registry.addMapping("/api/v1/**")
+                    .allowedOrigins("http://localhost:5173", "http://localhost:4173")
+                    .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                    .allowedHeaders("*")
+                    .allowCredentials(false);
+        }
+    }
+
+
+STEP 4 — Configure Jackson to use snake_case (recommended)
+-----------------------------------------------------------
+The frontend API types use snake_case field names (doc_id, owner_id, updated_at, etc.).
+Add this to your application.properties:
+
+    spring.jackson.property-naming-strategy=SNAKE_CASE
+    spring.jackson.serialization.write-dates-as-timestamps=false
+
+This makes Spring Boot serialize:
+    docId        ->  doc_id
+    updatedAt    ->  updated_at
+    createdAt    ->  created_at
+    ownerId      ->  owner_id
+
+If you do NOT add these, the frontend will still work because the types now support
+both camelCase and snake_case — but using snake_case is cleaner.
+
+
+STEP 5 — Restart the frontend dev server
+-----------------------------------------
+After creating .env.local, restart the dev server so Vite picks up the new env variable:
+
+    pnpm dev
+    (or: npm run dev)
+
+
+STEP 6 — Verify in browser DevTools
+-------------------------------------
+Open the browser at http://localhost:5173
+Open DevTools -> Network tab
+You should see requests going to http://localhost:8080/api/v1/...
+instead of being intercepted by the mock adapter.
+
+
+TROUBLESHOOTING
+---------------
+- 401 errors       -> JWT auth not configured yet, check auth endpoints
+- 404 errors       -> Check that your Spring Boot controller mappings match /api/v1/*
+- CORS errors      -> Step 3 not applied yet, check the browser console for the exact origin
+- Empty data       -> Database might be empty, seed it with test data in pgAdmin4
+- metadata field   -> Make sure your document API returns the metadata jsonb field
+                      as a parsed JSON object, not a raw escaped string.
+                      In your DocumentManageController, serialize metadata properly.

@@ -1,0 +1,235 @@
+FIX COMPILE ERRORS - DOCUMENT MODULE (OWNER-SCOPED VERSION)
+
+You currently have a mix of:
+- New module: documentManagement (DocumentManage, DocumentManageService, DocumentManageRepository)
+- Old module: root package DocumentManager, DocumentManagerController
+
+Most compile/runtime errors come from method signature mismatch and old/new module overlap.
+
+================================================================
+1) IMMEDIATE ROOT CAUSES IN YOUR CURRENT DocumentManageService
+================================================================
+A) Method call mismatch:
+- You changed getDocumentById to require (id, currentUserId)
+- But updateDocument still calls getDocumentById(id)
+
+B) Undefined variable:
+- searchDocuments uses userId which does not exist in that method scope
+
+C) Ownership flow not applied consistently:
+- updateDocument and deleteDocumentById should receive currentUserId
+
+================================================================
+2) REPLACE DocumentManageService WITH THIS CONSISTENT VERSION
+================================================================
+package com.saigontechnologyintern.document_management.documentManagement;
+
+import com.saigontechnologyintern.document_management.folderManagement.FolderManager;
+import com.saigontechnologyintern.document_management.folderManagement.FolderManagerRepository;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+@Service
+public class DocumentManageService {
+    private final DocumentManageRepository documentManageRepository;
+    private final FolderManagerRepository folderManagerRepository;
+
+    public DocumentManageService(
+            DocumentManageRepository documentManageRepository,
+            FolderManagerRepository folderManagerRepository) {
+        this.documentManageRepository = documentManageRepository;
+        this.folderManagerRepository = folderManagerRepository;
+    }
+
+    public List<DocumentManage> getDocuments(Integer currentUserId, Integer folderId, String q) {
+        if (folderId != null) {
+            List<DocumentManage> inFolder = documentManageRepository
+                    .findByOwner_UserIdAndFolder_FolderId(currentUserId, folderId);
+
+            if (q == null || q.isBlank()) {
+                return inFolder;
+            }
+
+            String keyword = q.toLowerCase();
+            return inFolder.stream()
+                    .filter(d -> d.getTitle() != null && d.getTitle().toLowerCase().contains(keyword))
+                    .toList();
+        }
+
+        if (q == null || q.isBlank()) {
+            return documentManageRepository.findByOwner_UserId(currentUserId);
+        }
+
+        return documentManageRepository.findByOwner_UserIdAndTitleContainingIgnoreCase(currentUserId, q);
+    }
+
+    public DocumentManage getDocumentById(Integer id, Integer currentUserId) {
+        DocumentManage doc = documentManageRepository
+                .findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+
+        boolean isOwner = doc.getOwner() != null && doc.getOwner().getUserId().equals(currentUserId);
+        if (!isOwner) {
+            throw new IllegalArgumentException("Document not found with id: " + id);
+        }
+
+        return doc;
+    }
+
+    public DocumentManage createDocument(MultipartFile file, Integer folderId, String title, Integer currentUserId) {
+        try {
+            DocumentManage document = new DocumentManage();
+
+            String originalFilename = file.getOriginalFilename();
+            String resolvedTitle = (title != null && !title.isBlank()) ? title : originalFilename;
+            document.setTitle(resolvedTitle != null ? resolvedTitle : "Untitled");
+
+            String extension = "FILE";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toUpperCase();
+            }
+
+            String mime = (file.getContentType() == null || file.getContentType().isBlank())
+                    ? "application/octet-stream"
+                    : file.getContentType();
+
+            document.setMetadata(Map.of(
+                    "extension", extension,
+                    "mime_type", mime,
+                    "size_bytes", file.getSize()));
+
+            document.setOriginalFilename(originalFilename);
+            document.setContentType(mime);
+            document.setFileData(file.getBytes());
+
+            if (folderId != null) {
+                FolderManager folder = folderManagerRepository.findById(folderId)
+                        .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+                boolean folderOwnedByCurrent = folder.getOwner() != null
+                        && folder.getOwner().getUserId().equals(currentUserId);
+                if (!folderOwnedByCurrent) {
+                    throw new IllegalArgumentException("You can only upload to your own folders");
+                }
+
+                document.setFolder(folder);
+            }
+
+            // IMPORTANT: assign owner by current user id in controller before save,
+            // or load user entity in service if UserManagerRepository is injected.
+
+            return documentManageRepository.save(document);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read uploaded file content", e);
+        }
+    }
+
+    public DocumentManage updateDocument(Integer id, DocumentManage updatedDocument, Integer currentUserId) {
+        DocumentManage existing = getDocumentById(id, currentUserId);
+
+        if (updatedDocument.getTitle() != null) {
+            existing.setTitle(updatedDocument.getTitle());
+        }
+        if (updatedDocument.getMetadata() != null) {
+            existing.setMetadata(updatedDocument.getMetadata());
+        }
+
+        // Do not allow owner changes from request body.
+        if (updatedDocument.getFolder() != null) {
+            FolderManager target = updatedDocument.getFolder();
+            if (target.getFolderId() == null) {
+                throw new IllegalArgumentException("folder_id is required in folder object");
+            }
+            FolderManager realFolder = folderManagerRepository.findById(target.getFolderId())
+                    .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + target.getFolderId()));
+
+            boolean folderOwnedByCurrent = realFolder.getOwner() != null
+                    && realFolder.getOwner().getUserId().equals(currentUserId);
+            if (!folderOwnedByCurrent) {
+                throw new IllegalArgumentException("You can only move to your own folders");
+            }
+
+            existing.setFolder(realFolder);
+        }
+
+        return documentManageRepository.save(existing);
+    }
+
+    public DocumentManage moveDocument(Integer id, Integer folderId, Integer currentUserId) {
+        if (folderId == null) {
+            throw new IllegalArgumentException("folder_id is required");
+        }
+
+        DocumentManage doc = getDocumentById(id, currentUserId);
+
+        FolderManager target = folderManagerRepository
+                .findById(folderId)
+                .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+        boolean folderOwnedByCurrent = target.getOwner() != null
+                && target.getOwner().getUserId().equals(currentUserId);
+        if (!folderOwnedByCurrent) {
+            throw new IllegalArgumentException("You can only move to your own folders");
+        }
+
+        doc.setFolder(target);
+        return documentManageRepository.save(doc);
+    }
+
+    public void deleteDocumentById(Integer id, Integer currentUserId) {
+        DocumentManage existing = getDocumentById(id, currentUserId);
+        documentManageRepository.delete(existing);
+    }
+}
+
+================================================================
+3) DOCUMENT REPOSITORY IS OK
+================================================================
+Your repository methods are correct:
+- findByOwner_UserId
+- findByOwner_UserIdAndFolder_FolderId
+- findByOwner_UserIdAndTitleContainingIgnoreCase
+
+No change needed there.
+
+================================================================
+4) IMPORTANT: OLD DocumentManagerController / DocumentManager ENTITY
+================================================================
+You also shared these old classes in root package:
+- com.saigontechnologyintern.document_management.DocumentManagerController
+- com.saigontechnologyintern.document_management.DocumentManager
+
+They are separate from documentManagement module and can cause confusion or wrong endpoint usage.
+
+Recommended:
+- Keep only one document API module.
+- If you are using /api/v1/documents from DocumentManageController, remove or disable old /api/v1/document-manager controller.
+
+================================================================
+5) MINIMUM FIXES IF YOU DO NOT REPLACE FULL SERVICE
+================================================================
+At minimum, fix these lines in your current service:
+
+A) In searchDocuments:
+- Replace findByOwner_UserIdAndTitleContainingIgnoreCase(userId, q)
+- With findByOwner_UserIdAndTitleContainingIgnoreCase(currentUserId, q)
+- and add currentUserId parameter to method.
+
+B) In updateDocument:
+- Replace getDocumentById(id)
+- With getDocumentById(id, currentUserId)
+- and add currentUserId parameter to method.
+
+C) In deleteDocumentById:
+- Add currentUserId parameter and call getDocumentById(id, currentUserId) before delete.
+
+================================================================
+6) NEXT RUN CHECK
+================================================================
+After patching:
+1. Build app.
+2. If errors remain, send first compile error block (first 20-40 lines only).
+3. Check there is no accidental import or call to old DocumentManager module.

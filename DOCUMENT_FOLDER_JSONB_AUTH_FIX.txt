@@ -1,0 +1,106 @@
+DOCUMENT MOVE JSONB ERROR + 8080 AUTH TESTING GUIDE
+
+1) Why move-document fails
+- PostgreSQL column documents.metadata is jsonb.
+- Your entity uses: private String metadata;
+- Hibernate sends metadata as VARCHAR when saving, causing:
+  ERROR: column "metadata" is of type jsonb but expression is of type character varying
+
+2) Correct mapping (recommended)
+In DocumentManage entity, map metadata as JSON instead of String.
+
+Use:
+- import org.hibernate.annotations.JdbcTypeCode;
+- import org.hibernate.type.SqlTypes;
+
+Field:
+@JdbcTypeCode(SqlTypes.JSON)
+@Column(columnDefinition = "jsonb")
+private java.util.Map<String, Object> metadata;
+
+Then ensure create/update write valid JSON, for example:
+metadata = Map.of("contentType", file.getContentType());
+
+3) Fast workaround for move only
+If you only need move to work immediately, update only folder_id (without touching metadata):
+
+Repository:
+@Modifying
+@Query("update DocumentManage d set d.folder = :folder where d.docId = :docId")
+int moveToFolder(@Param("docId") Integer docId, @Param("folder") FolderManager folder);
+
+Service:
+@Transactional
+public DocumentManage moveDocument(Integer id, DocumentManage payload) {
+  DocumentManage existing = getDocumentById(id);
+  FolderManager target = payload.getFolder();
+  if (target == null || target.getFolderId() == null) {
+    throw new IllegalArgumentException("folder_id is required");
+  }
+  folderRepo.findById(target.getFolderId())
+      .orElseThrow(() -> new IllegalArgumentException("Folder not found"));
+  documentRepo.moveToFolder(id, target);
+  return getDocumentById(id);
+}
+
+4) Why Unauthorized happens on move/add-folder
+Your SecurityConfig has:
+- /api/v1/auth/login and /api/v1/auth/register are permitAll
+- all other endpoints require Bearer token
+So /api/v1/documents/** and /api/v1/folders/** need Authorization header.
+
+5) How to test authorized endpoints on localhost:8080
+A. Login to get token
+POST http://localhost:8080/api/v1/auth/login
+Body JSON:
+{
+  "email": "your@email.com",
+  "password": "your_password"
+}
+
+Response contains token. Copy token value.
+
+B. Call protected endpoint with header
+Authorization: Bearer <TOKEN>
+
+Examples:
+- Create folder
+POST http://localhost:8080/api/v1/folders
+Headers:
+  Authorization: Bearer <TOKEN>
+  Content-Type: application/json
+Body:
+{
+  "name": "Invoices"
+}
+
+- Move document
+PATCH http://localhost:8080/api/v1/documents/123/move
+Headers:
+  Authorization: Bearer <TOKEN>
+  Content-Type: application/json
+Body:
+{
+  "folder": { "folderId": 10 }
+}
+
+6) PowerShell quick test
+# login
+$loginBody = @{ email = "your@email.com"; password = "your_password" } | ConvertTo-Json
+$login = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/auth/login" -ContentType "application/json" -Body $loginBody
+$token = $login.token
+
+# create folder
+$folderBody = @{ name = "Invoices" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/folders" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body $folderBody
+
+# move doc
+$moveBody = @{ folder = @{ folderId = 10 } } | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Patch -Uri "http://localhost:8080/api/v1/documents/123/move" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body $moveBody
+
+7) Common mistakes checklist
+- Missing "Bearer " prefix in Authorization header.
+- Using expired token (login again to get new token).
+- Sending malformed JSON body.
+- Frontend running with mock mode (VITE_USE_MOCK not false) and not hitting real backend.
+- app.jwt.secret mismatch between where token is issued and where token is validated.

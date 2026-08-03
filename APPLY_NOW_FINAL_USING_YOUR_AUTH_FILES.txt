@@ -1,0 +1,239 @@
+APPLY NOW - FINAL IMPLEMENTATION USING YOUR AUTH FILES
+
+This guide is tailored to the exact auth classes you shared:
+- AuthController.extractToken(...)
+- AuthService.getCurrentUser(token)
+- JwtAuthenticationFilter + SecurityConfig
+
+No SecurityContext helper in document/folder services is required in this version.
+
+================================================================
+1) BYTEA FIX (DO THIS FIRST)
+================================================================
+In DocumentManage entity, ensure file data is mapped as bytea-safe binary:
+
+@org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARBINARY)
+@Column(name = "file_data", columnDefinition = "bytea")
+private byte[] fileData;
+
+Rules:
+- Keep type as byte[].
+- Remove @Lob from fileData if present.
+- Keep metadata as jsonb:
+
+@JdbcTypeCode(SqlTypes.JSON)
+@Column(columnDefinition = "jsonb")
+private Map<String, Object> metadata;
+
+================================================================
+2) USE AUTHSERVICE CURRENT USER IN CONTROLLERS
+================================================================
+You already have this pattern in AuthController (/me):
+- parse bearer token
+- validate token
+- authService.getCurrentUser(token)
+
+Apply same pattern to DocumentManageController and FolderManagerController.
+
+2.1 Inject auth deps into each controller
+
+private final AuthService authService;
+private final JwtService jwtService;
+
+public DocumentManageController(DocumentManageService documentManageService, AuthService authService, JwtService jwtService) {
+    this.documentManageService = documentManageService;
+    this.authService = authService;
+    this.jwtService = jwtService;
+}
+
+2.2 Add helpers in controller
+
+private String extractToken(String authHeader) {
+    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        throw new IllegalArgumentException("Invalid authorization header");
+    }
+    String token = authHeader.substring(7).trim();
+    if (!jwtService.isTokenValid(token)) {
+        throw new IllegalArgumentException("Invalid or expired token");
+    }
+    return token;
+}
+
+private Integer currentUserIdFromHeader(String authorization) {
+    String token = extractToken(authorization);
+    return authService.getCurrentUser(token).getUserId();
+}
+
+================================================================
+3) MOVE DOCUMENT API (folder_id CONTRACT)
+================================================================
+3.1 Request DTO in DocumentManageController
+
+public static class MoveDocumentRequest {
+    private Integer folder_id;
+
+    public Integer getFolder_id() { return folder_id; }
+    public void setFolder_id(Integer folder_id) { this.folder_id = folder_id; }
+}
+
+3.2 Move endpoint
+
+@PatchMapping("/{id}/move")
+public DocumentManage moveDocument(
+        @PathVariable Integer id,
+        @RequestBody MoveDocumentRequest request,
+        @RequestHeader("Authorization") String authorization) {
+
+    Integer currentUserId = currentUserIdFromHeader(authorization);
+    return documentManageService.moveDocument(id, request.getFolder_id(), currentUserId);
+}
+
+================================================================
+4) OWNER-SCOPED DOCUMENT ACCESS
+================================================================
+4.1 Repository methods (DocumentManageRepository)
+
+List<DocumentManage> findByOwner_UserId(Integer userId);
+List<DocumentManage> findByOwner_UserIdAndFolder_FolderId(Integer userId, Integer folderId);
+List<DocumentManage> findByOwner_UserIdAndTitleContainingIgnoreCase(Integer userId, String title);
+
+4.2 Service methods (DocumentManageService)
+
+public List<DocumentManage> getDocuments(Integer currentUserId, Integer folderId, String q) {
+    if (folderId != null) {
+        if (q != null && !q.isBlank()) {
+            return documentManageRepository
+                    .findByOwner_UserIdAndFolder_FolderId(currentUserId, folderId)
+                    .stream()
+                    .filter(d -> d.getTitle() != null && d.getTitle().toLowerCase().contains(q.toLowerCase()))
+                    .toList();
+        }
+        return documentManageRepository.findByOwner_UserIdAndFolder_FolderId(currentUserId, folderId);
+    }
+
+    if (q == null || q.isBlank()) {
+        return documentManageRepository.findByOwner_UserId(currentUserId);
+    }
+    return documentManageRepository.findByOwner_UserIdAndTitleContainingIgnoreCase(currentUserId, q);
+}
+
+public DocumentManage getDocumentById(Integer id, Integer currentUserId) {
+    DocumentManage doc = documentManageRepository
+            .findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Document not found with id: " + id));
+
+    boolean isOwner = doc.getOwner() != null && doc.getOwner().getUserId().equals(currentUserId);
+    if (!isOwner) {
+        throw new IllegalArgumentException("Document not found with id: " + id);
+    }
+    return doc;
+}
+
+public DocumentManage moveDocument(Integer id, Integer folderId, Integer currentUserId) {
+    if (folderId == null) {
+        throw new IllegalArgumentException("folder_id is required");
+    }
+
+    DocumentManage doc = getDocumentById(id, currentUserId);
+
+    FolderManager target = folderManagerRepository
+            .findById(folderId)
+            .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + folderId));
+
+    boolean folderOwnedByCurrent = target.getOwner() != null
+            && target.getOwner().getUserId().equals(currentUserId);
+    if (!folderOwnedByCurrent) {
+        throw new IllegalArgumentException("You can only move to your own folders");
+    }
+
+    doc.setFolder(target);
+    return documentManageRepository.save(doc);
+}
+
+4.3 Controller list/get endpoints (DocumentManageController)
+
+@GetMapping
+public List<DocumentManage> getDocuments(
+        @RequestHeader("Authorization") String authorization,
+        @RequestParam(value = "folder_id", required = false) Integer folderId,
+        @RequestParam(value = "q", required = false) String q) {
+
+    Integer currentUserId = currentUserIdFromHeader(authorization);
+    return documentManageService.getDocuments(currentUserId, folderId, q);
+}
+
+@GetMapping("/{id}")
+public DocumentManage getDocumentById(
+        @PathVariable Integer id,
+        @RequestHeader("Authorization") String authorization) {
+
+    Integer currentUserId = currentUserIdFromHeader(authorization);
+    return documentManageService.getDocumentById(id, currentUserId);
+}
+
+================================================================
+5) OWNER-SCOPED FOLDER ACCESS
+================================================================
+5.1 Repository method (FolderManagerRepository)
+
+List<FolderManager> findByOwner_UserId(Integer userId);
+
+5.2 Service methods (FolderManagerService)
+
+public List<FolderManager> getAllFolders(Integer currentUserId) {
+    return folderManagerRepository.findByOwner_UserId(currentUserId);
+}
+
+public FolderManager getFolderById(Integer id, Integer currentUserId) {
+    FolderManager folder = folderManagerRepository
+            .findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Folder not found with id: " + id));
+
+    boolean isOwner = folder.getOwner() != null && folder.getOwner().getUserId().equals(currentUserId);
+    if (!isOwner) {
+        throw new IllegalArgumentException("Folder not found with id: " + id);
+    }
+
+    return folder;
+}
+
+5.3 Controller endpoints (FolderManagerController)
+
+@GetMapping
+public List<FolderManager> getAllFolders(@RequestHeader("Authorization") String authorization) {
+    Integer currentUserId = currentUserIdFromHeader(authorization);
+    return folderManagerService.getAllFolders(currentUserId);
+}
+
+@GetMapping("/{id}")
+public FolderManager getFolderById(
+        @PathVariable Integer id,
+        @RequestHeader("Authorization") String authorization) {
+
+    Integer currentUserId = currentUserIdFromHeader(authorization);
+    return folderManagerService.getFolderById(id, currentUserId);
+}
+
+================================================================
+6) KEEP YOUR CURRENT USERMANAGER APPROACH
+================================================================
+Your UserManager with @JsonIgnore collections is good for preventing circular serialization.
+Keep that as-is.
+
+Your AuthService.toUserManager(...) also works for this flow because owner checks only need userId.
+
+================================================================
+7) CHECKLIST
+================================================================
+1. Login as user A and user B.
+2. user A creates docs/folders.
+3. user B GET /api/v1/documents: must NOT include user A docs.
+4. user B GET /api/v1/folders: must NOT include user A folders.
+5. user A PATCH /api/v1/documents/{id}/move with {"folder_id": ownFolderId}: success.
+6. user A move to user B folder: fail.
+
+================================================================
+8) NOTE ON ROLE STRINGS
+================================================================
+You currently save role as "User" and expose uppercase in AuthService mapper.
+Security filter normalizes with toUpperCase() before ROLE_ prefix, so authorization flow remains consistent.

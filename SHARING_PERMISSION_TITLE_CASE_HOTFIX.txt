@@ -1,0 +1,105 @@
+SHARING + PERMISSION HOTFIX (TITLE-CASE DB CONSTRAINTS)
+
+Root cause from your current modules:
+- SharingRequestManagerService writes uppercase status values: PENDING, APPROVED, REJECTED.
+- PermissionManagerService writes uppercase access values: OWNER, EDITOR, VIEWER.
+- Your PostgreSQL check constraints expect title-case values.
+
+This is why insert into sharing_requests failed.
+
+============================================================
+1) SharingRequestManagerService changes
+============================================================
+A) In createSharingRequest(...)
+Current:
+- entity.setStatus("PENDING");
+Replace with:
+- entity.setStatus("Pending");
+
+B) In approveSharingRequest(...)
+Current:
+- request.setStatus("APPROVED");
+- permission.setAccessType("VIEWER");
+Replace with:
+- request.setStatus("Approved");
+- permission.setAccessType("Viewer");
+
+C) In rejectSharingRequest(...)
+Current:
+- request.setStatus("REJECTED");
+Replace with:
+- request.setStatus("Rejected");
+
+D) Replace normalizeStatus(String raw) with title-case version:
+
+private String normalizeStatus(String raw) {
+    if (raw == null) return "Pending";
+    String value = raw.trim().toLowerCase();
+    if ("pending".equals(value)) return "Pending";
+    if ("approved".equals(value)) return "Approved";
+    if ("rejected".equals(value)) return "Rejected";
+    return "Pending";
+}
+
+============================================================
+2) PermissionManagerService changes
+============================================================
+Replace normalizeAccessType(String raw) with title-case version:
+
+private String normalizeAccessType(String raw) {
+    if (raw == null) return "Viewer";
+    String value = raw.trim().toLowerCase();
+    if ("owner".equals(value)) return "Owner";
+    if ("editor".equals(value)) return "Editor";
+    if ("viewer".equals(value)) return "Viewer";
+    return "Viewer";
+}
+
+Important:
+- Keep calling normalizeAccessType(...) in createPermission, updatePermission, and toDto.
+- This ensures both writes and API responses remain DB-safe.
+
+============================================================
+3) Optional safety in entity setters
+============================================================
+You can keep entities unchanged.
+Normalization in services is enough and cleaner.
+
+============================================================
+4) SQL cleanup for existing rows
+============================================================
+Run once to normalize existing data:
+
+UPDATE sharing_requests
+SET status = CASE
+  WHEN LOWER(status) = 'pending' THEN 'Pending'
+  WHEN LOWER(status) = 'approved' THEN 'Approved'
+  WHEN LOWER(status) = 'rejected' THEN 'Rejected'
+  ELSE 'Pending'
+END;
+
+UPDATE permissions
+SET access_type = CASE
+  WHEN LOWER(access_type) = 'owner' THEN 'Owner'
+  WHEN LOWER(access_type) = 'editor' THEN 'Editor'
+  WHEN LOWER(access_type) = 'viewer' THEN 'Viewer'
+  ELSE 'Viewer'
+END;
+
+============================================================
+5) Quick validation flow
+============================================================
+1. Restart backend.
+2. Create sharing request from document detail.
+3. Approve request from sharing requests page.
+4. Confirm no DataIntegrityViolationException.
+5. Verify rows:
+   - sharing_requests.status in (Pending, Approved, Rejected)
+   - permissions.access_type in (Owner, Editor, Viewer)
+
+============================================================
+6) Note about frontend
+============================================================
+Your frontend now normalizes status/access values for display and actions,
+so it works with both title-case and uppercase responses.
+Backend should still use title-case because DB constraints enforce it.

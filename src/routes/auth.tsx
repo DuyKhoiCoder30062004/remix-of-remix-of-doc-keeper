@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiErrorMessage } from "@/lib/api";
+import { demoAuthAccounts, defaultAuthValues } from "@/lib/mock/seed-data";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -15,8 +16,8 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const [mode, setMode] = useState<"signin" | "register">("signin");
-  const [email, setEmail] = useState("admin@firm.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState(defaultAuthValues.email);
+  const [password, setPassword] = useState(defaultAuthValues.password);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -57,8 +58,11 @@ function AuthPage() {
             </p>
             <div className="text-xs text-muted-foreground space-y-1 p-4 rounded-lg ring-1 ring-border bg-secondary/40">
               <p className="font-semibold text-foreground">Prototype accounts</p>
-              <p>Admin — <code>admin@firm.com</code> / <code>admin123</code></p>
-              <p>User — <code>sarah@firm.com</code> / <code>sarah123</code></p>
+              {demoAuthAccounts.map((account) => (
+                <p key={account.email}>
+                  {account.label} — <code>{account.email}</code> / <code>{account.password}</code>
+                </p>
+              ))}
             </div>
           </div>
 

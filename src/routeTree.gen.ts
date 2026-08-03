@@ -10,20 +10,31 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as SharingRequestsRouteImport } from './routes/sharing-requests'
 import { Route as FoldersRouteImport } from './routes/folders'
+import { Route as DocumentsIdRouteImport } from './routes/documents-id'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DocumentsIdRouteImport } from './routes/documents.$id'
 
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SharingRequestsRoute = SharingRequestsRouteImport.update({
+  id: '/sharing-requests',
+  path: '/sharing-requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FoldersRoute = FoldersRouteImport.update({
   id: '/folders',
   path: '/folders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocumentsIdRoute = DocumentsIdRouteImport.update({
+  id: '/documents-id',
+  path: '/documents-id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -41,60 +52,73 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DocumentsIdRoute = DocumentsIdRouteImport.update({
-  id: '/documents/$id',
-  path: '/documents/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/documents-id': typeof DocumentsIdRoute
   '/folders': typeof FoldersRoute
+  '/sharing-requests': typeof SharingRequestsRoute
   '/upload': typeof UploadRoute
-  '/documents/$id': typeof DocumentsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/documents-id': typeof DocumentsIdRoute
   '/folders': typeof FoldersRoute
+  '/sharing-requests': typeof SharingRequestsRoute
   '/upload': typeof UploadRoute
-  '/documents/$id': typeof DocumentsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/documents-id': typeof DocumentsIdRoute
   '/folders': typeof FoldersRoute
+  '/sharing-requests': typeof SharingRequestsRoute
   '/upload': typeof UploadRoute
-  '/documents/$id': typeof DocumentsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/admin' | '/auth' | '/folders' | '/upload' | '/documents/$id'
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/documents-id'
+    | '/folders'
+    | '/sharing-requests'
+    | '/upload'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/auth' | '/folders' | '/upload' | '/documents/$id'
+  to:
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/documents-id'
+    | '/folders'
+    | '/sharing-requests'
+    | '/upload'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/auth'
+    | '/documents-id'
     | '/folders'
+    | '/sharing-requests'
     | '/upload'
-    | '/documents/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
-  FoldersRoute: typeof FoldersRoute
-  UploadRoute: typeof UploadRoute
   DocumentsIdRoute: typeof DocumentsIdRoute
+  FoldersRoute: typeof FoldersRoute
+  SharingRequestsRoute: typeof SharingRequestsRoute
+  UploadRoute: typeof UploadRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -106,11 +130,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sharing-requests': {
+      id: '/sharing-requests'
+      path: '/sharing-requests'
+      fullPath: '/sharing-requests'
+      preLoaderRoute: typeof SharingRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/folders': {
       id: '/folders'
       path: '/folders'
       fullPath: '/folders'
       preLoaderRoute: typeof FoldersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/documents-id': {
+      id: '/documents-id'
+      path: '/documents-id'
+      fullPath: '/documents-id'
+      preLoaderRoute: typeof DocumentsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -134,13 +172,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/documents/$id': {
-      id: '/documents/$id'
-      path: '/documents/$id'
-      fullPath: '/documents/$id'
-      preLoaderRoute: typeof DocumentsIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -148,9 +179,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
-  FoldersRoute: FoldersRoute,
-  UploadRoute: UploadRoute,
   DocumentsIdRoute: DocumentsIdRoute,
+  FoldersRoute: FoldersRoute,
+  SharingRequestsRoute: SharingRequestsRoute,
+  UploadRoute: UploadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

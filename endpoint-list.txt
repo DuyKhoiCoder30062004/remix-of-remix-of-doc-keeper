@@ -1,0 +1,61 @@
+Spring Boot endpoint list for the current project
+================================================
+
+Auth endpoints
+--------------
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+- POST /api/v1/auth/logout
+- POST /api/v1/auth/password/forgot
+- POST /api/v1/auth/password/reset
+- GET  /api/v1/auth/me
+
+User endpoints
+--------------
+- GET    /api/v1/users
+- GET    /api/v1/users/{id}
+- PATCH  /api/v1/users/{id}/role
+- DELETE /api/v1/users/{id}
+- GET    /api/v1/users/audit/export
+
+Folder endpoints
+----------------
+- GET    /api/v1/folders
+- GET    /api/v1/folders/{id}
+- POST   /api/v1/folders
+- PATCH  /api/v1/folders/{id}
+- DELETE /api/v1/folders/{id}
+
+Document endpoints
+------------------
+- GET    /api/v1/documents
+- GET    /api/v1/documents/search
+- GET    /api/v1/documents/{id}
+- POST   /api/v1/documents
+- PATCH  /api/v1/documents/{id}
+- PATCH  /api/v1/documents/{id}/move
+- DELETE /api/v1/documents/{id}
+- GET    /api/v1/documents/{id}/download
+- GET    /api/v1/documents/{id}/audit
+
+Permission endpoints
+--------------------
+- GET    /api/v1/permissions
+- POST   /api/v1/permissions
+- PATCH  /api/v1/permissions/{id}
+- DELETE /api/v1/permissions/{id}
+
+Sharing request endpoints
+-------------------------
+- GET    /api/v1/sharing-requests
+- POST   /api/v1/sharing-requests
+- POST   /api/v1/sharing-requests/{id}/approve
+- POST   /api/v1/sharing-requests/{id}/reject
+
+Legacy compatibility endpoints
+------------------------------
+- GET    /api/v1/document-manager
+- GET    /api/v1/document-manager/{id}
+- POST   /api/v1/document-manager
+- PUT    /api/v1/document-manager/{id}
+- DELETE /api/v1/document-manager/{id}
