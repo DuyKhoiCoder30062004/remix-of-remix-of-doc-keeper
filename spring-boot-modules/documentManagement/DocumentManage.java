@@ -1,14 +1,17 @@
 package com.saigontechnologyintern.document_management.documentManagement;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.saigontechnologyintern.document_management.folderManagement.FolderManager;
 import com.saigontechnologyintern.document_management.permissionManagement.PermissionManager;
 import com.saigontechnologyintern.document_management.sharingRequestManagement.SharingRequestManager;
 import com.saigontechnologyintern.document_management.userManagement.UserManager;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Entity
@@ -23,8 +26,9 @@ public class DocumentManage {
     @Column(nullable = false, length = 255)
     private String title;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private String metadata;
+    private java.util.Map<String, Object> metadata;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -32,7 +36,41 @@ public class DocumentManage {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // ⭐ MODIFICATION: Added @JsonIgnore to break circular reference
+    public byte[] getFileData() {
+        return fileData;
+    }
+
+    public void setFileData(byte[] fileData) {
+        this.fileData = fileData;
+    }
+
+    public String getOriginalFilename() {
+        return originalFilename;
+    }
+
+    public void setOriginalFilename(String originalFilename) {
+        this.originalFilename = originalFilename;
+    }
+
+    public String getContentType() {
+        return contentType;
+    }
+
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
+    }
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARBINARY)
+    @Column(name = "file_data", columnDefinition = "bytea")
+    private byte[] fileData;
+
+    @Column(name = "original_filename")
+    private String originalFilename;
+
+    @Column(name = "content_type")
+    private String contentType;
+
+    // MODIFICATION: Added @JsonIgnore to break circular reference
     // Prevents: UserManager → documents → owner (UserManager) → infinite loop
     // Frontend gets doc_id and title without circular UserManager serialization
     @JsonIgnore
@@ -52,23 +90,19 @@ public class DocumentManage {
 
     @PrePersist
     protected void onCreate() {
-        if (this.createdAt == null) {
-            this.createdAt = LocalDateTime.now();
-        }
-        if (this.updatedAt == null) {
-            this.updatedAt = LocalDateTime.now();
-        }
+        createdAt = LocalDateTime.now();
+        updatedAt = createdAt;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 
     public DocumentManage() {
     }
 
-    public DocumentManage(String title, String metadata, UserManager owner) {
+    public DocumentManage(String title, Map<String, Object> metadata, UserManager owner) {
         this.title = title;
         this.metadata = metadata;
         this.owner = owner;
@@ -90,11 +124,11 @@ public class DocumentManage {
         this.title = title;
     }
 
-    public String getMetadata() {
+    public Map<String, Object> getMetadata() {
         return metadata;
     }
 
-    public void setMetadata(String metadata) {
+    public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
     }
 
@@ -149,8 +183,7 @@ public class DocumentManage {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        DocumentManage that = (DocumentManage) o;
+        if (!(o instanceof DocumentManage that)) return false;
         return Objects.equals(docId, that.docId);
     }
 

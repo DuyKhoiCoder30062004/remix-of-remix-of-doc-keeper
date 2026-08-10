@@ -1,8 +1,8 @@
 package com.saigontechnologyintern.document_management.permissionManagement;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.saigontechnologyintern.document_management.documentManagement.DocumentManage;
 import com.saigontechnologyintern.document_management.userManagement.UserManager;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.util.Objects;
 
@@ -76,8 +76,7 @@ public class PermissionManager {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        PermissionManager that = (PermissionManager) o;
+        if (!(o instanceof PermissionManager that)) return false;
         return Objects.equals(permId, that.permId);
     }
 

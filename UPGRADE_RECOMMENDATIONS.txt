@@ -1,0 +1,65 @@
+UPGRADE RECOMMENDATIONS FOR THE CURRENT APP
+=========================================
+
+This file summarizes the most important improvements to make across the frontend and backend for the current document management application.
+
+1. AUTHENTICATION AND SECURITY
+- Replace localStorage-based JWT storage with a more secure production strategy.
+- Add short-lived access tokens and refresh-token support.
+- Implement proper logout revocation or token invalidation.
+- Add rate limiting and brute-force protection for login/register endpoints.
+- Add email verification for new registrations.
+- Enforce password strength rules.
+- Add CSRF protection where relevant for cookie-based auth if that approach is adopted.
+- Harden CORS and ensure only approved origins are allowed.
+
+2. ROLE-BASED ACCESS CONTROL
+- Enforce admin-only access on the backend for user management and role changes.
+- Centralize role checks and permissions instead of scattering logic across services/controllers.
+- Make sure regular users cannot access admin endpoints even if the UI hides them.
+- Add explicit authorization rules for document create/edit/delete/share operations.
+
+3. DOCUMENT OPERATIONS
+- Replace storing binary file content directly in the database with object storage such as S3.
+- Add file size limits and MIME type validation.
+- Add streaming uploads/downloads for better performance.
+- Add virus scanning and malware checks for uploaded files.
+- Add previews for common file types where possible.
+- Add versioning for document updates.
+
+4. PERMISSIONS AND SHARING
+- Prevent duplicate sharing requests.
+- Add request expiry and cancellation/revocation support.
+- Improve approval/rejection workflows with clearer status handling.
+- Add notification support for recipients when a share request is created or updated.
+- Ensure permissions are consistently checked across view/edit/delete actions.
+
+5. AUDIT AND OBSERVABILITY
+- Replace placeholder audit export logic with real audit event logging.
+- Log actions such as login, register, upload, download, share, approve, reject, role change, and delete.
+- Add request tracing and structured logs for debugging and operations.
+- Add monitoring and alerting for failed logins, permission errors, and API latency.
+
+6. FRONTEND IMPROVEMENTS
+- Improve form validation and user feedback on login/register pages.
+- Add stronger loading, empty-state, and error-state UX.
+- Make route guards enforce authorization both client-side and server-side.
+- Remove prototype/demo account hints from production-facing screens.
+- Improve loading behavior for folders, documents, permissions, and admin panels.
+
+7. DATA MODEL AND DATABASE
+- Add indexes for tables used heavily in search and listing operations.
+- Align schema constraints and defaults consistently across local and production databases.
+- Consider lookup tables for roles/access types/status values if the system grows further.
+- Review foreign key behavior and cascading rules for correctness.
+
+8. TESTING AND RELIABILITY
+- Add unit and integration tests for authentication, document CRUD, sharing rules, role-based access, and admin flows.
+- Add API tests for failure cases such as unauthorized access and invalid file uploads.
+- Add end-to-end tests for the main user journeys.
+
+9. DEPLOYMENT AND OPERATIONS
+- Move frontend and backend configuration to production-safe environment variables.
+- Use HTTPS everywhere and update allowed origins accordingly.
+- Add health checks and deployment rollback procedures.
+- Use separate development, staging, and production environments.

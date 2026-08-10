@@ -4,7 +4,7 @@ import axios, { AxiosError, type AxiosInstance } from "axios";
 // (e.g. http://localhost:8080) once the backend is running.
 const BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "http://100.52.239.219:8080";
+  "http://54.234.97.188:8080";
 
 const TOKEN_KEY = "vault.auth.token";
 

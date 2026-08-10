@@ -5,6 +5,8 @@ import com.saigontechnologyintern.document_management.userManagement.UserManager
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 @Service
 public class AuthService {
     private final UserManagerRepository userRepository;
@@ -35,7 +37,7 @@ public class AuthService {
 
         // CHANGED: generate a signed JWT instead of a local in-memory token.
         String token = jwtService.generateToken(user);
-        return new AuthResponseDto(token, toUserDto(user));
+        return new AuthResponseDto(token, toUserManager(user));
     }
 
     public AuthResponseDto login(LoginRequest request) {
@@ -49,27 +51,28 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user);
-        return new AuthResponseDto(token, toUserDto(user));
+        return new AuthResponseDto(token, toUserManager(user));
     }
 
-    public UserDto getCurrentUser(String token) {
+    public UserManager getCurrentUser(String token) {
         Integer userId = jwtService.extractUserId(token);
         UserManager user = userRepository
                 .findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        return toUserDto(user);
+        return toUserManager(user);
     }
 
     public void logout(String token) {
         // CHANGED: JWT is stateless, so logout is handled client-side until you add a token blacklist/refresh flow.
     }
 
-    private UserDto toUserDto(UserManager user) {
-        return new UserDto(
-                user.getUserId() != null ? String.valueOf(user.getUserId()) : null,
+    //dua ve DTO, mapper het'
+    private UserManager toUserManager(UserManager user) {
+        return new UserManager(
+                user.getUserId() != null ? user.getUserId() : null,
                 user.getName(),
                 user.getEmail(),
                 user.getRole() != null ? user.getRole().toUpperCase() : null,
-                user.getCreatedAt() != null ? user.getCreatedAt().toString() : null);
+                user.getCreatedAt() != null ? LocalDateTime.parse(user.getCreatedAt().toString()) : null);
     }
 }

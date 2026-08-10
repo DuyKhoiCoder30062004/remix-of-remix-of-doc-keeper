@@ -1,12 +1,14 @@
 package com.saigontechnologyintern.document_management.authManagement;
 
+import com.saigontechnologyintern.document_management.userManagement.UserManager;
+
 public class AuthResponseDto {
     private String token;
-    private UserDto user;
+    private UserManager user;
 
     public AuthResponseDto() {}
 
-    public AuthResponseDto(String token, UserDto user) {
+    public AuthResponseDto(String token, UserManager user) {
         this.token = token;
         this.user = user;
     }
@@ -19,11 +21,11 @@ public class AuthResponseDto {
         this.token = token;
     }
 
-    public UserDto getUser() {
+    public UserManager getUser() {
         return user;
     }
 
-    public void setUser(UserDto user) {
+    public void setUser(UserManager user) {
         this.user = user;
     }
 }

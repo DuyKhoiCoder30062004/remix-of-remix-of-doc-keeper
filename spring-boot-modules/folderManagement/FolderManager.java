@@ -1,8 +1,8 @@
 package com.saigontechnologyintern.document_management.folderManagement;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.saigontechnologyintern.document_management.documentManagement.DocumentManage;
 import com.saigontechnologyintern.document_management.userManagement.UserManager;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -39,9 +39,7 @@ public class FolderManager {
 
     @PrePersist
     protected void onCreate() {
-        if (this.createdAt == null) {
-            this.createdAt = LocalDateTime.now();
-        }
+        createdAt = LocalDateTime.now();
     }
 
     public FolderManager() {
@@ -95,8 +93,7 @@ public class FolderManager {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        FolderManager that = (FolderManager) o;
+        if (!(o instanceof FolderManager that)) return false;
         return Objects.equals(folderId, that.folderId);
     }
 

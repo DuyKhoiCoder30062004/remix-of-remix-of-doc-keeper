@@ -16,7 +16,7 @@ public class JwtService {
     @Value("${app.jwt.secret}")
     private String jwtSecret;
 
-    @Value("${app.jwt.expiration-ms:86400000}")
+    @Value("${app.jwt.expiration-ms}")
     private long jwtExpirationMs;
 
     public String generateToken(UserManager user) {
@@ -57,6 +57,7 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
+        //VerifyWith: publicKey
         return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
