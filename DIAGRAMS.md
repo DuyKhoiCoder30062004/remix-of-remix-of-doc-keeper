@@ -4,38 +4,42 @@
 
 ```mermaid
 flowchart LR
-    NguoiDung([Người dùng])
-    QuanTriVien([Quản trị viên])
-    HeThong([Hệ thống])
+    NguoiDung(["Người dùng"])
+    QuanTriVien(["Quản trị viên"])
+    HeThong(["Hệ thống"])
 
-    NguoiDung --> UC1[POST /api/v1/auth/register - Đăng ký tài khoản]
-    NguoiDung --> UC2[POST /api/v1/auth/login - Đăng nhập]
-    NguoiDung --> UC3[GET /api/v1/auth/me - Xem thông tin hiện tại]
-    NguoiDung --> UC4[POST /api/v1/auth/logout - Đăng xuất]
-    NguoiDung --> UC5[GET /api/v1/folders - Xem danh sách thư mục]
-    NguoiDung --> UC6[POST /api/v1/folders - Tạo thư mục]
-    NguoiDung --> UC7[PATCH /api/v1/folders/:id - Cập nhật thư mục]
-    NguoiDung --> UC8[DELETE /api/v1/folders/:id - Xóa thư mục]
-    NguoiDung --> UC9[POST /api/v1/documents/upload - Upload tài liệu]
-    NguoiDung --> UC10[GET /api/v1/documents - Xem danh sách tài liệu]
-    NguoiDung --> UC11[GET /api/v1/documents/:id - Xem chi tiết tài liệu]
-    NguoiDung --> UC12[PATCH /api/v1/documents/:id - Cập nhật tài liệu]
-    NguoiDung --> UC13[POST /api/v1/documents/:id/move - Di chuyển tài liệu]
-    NguoiDung --> UC14[DELETE /api/v1/documents/:id - Xóa tài liệu]
-    NguoiDung --> UC15[GET /api/v1/permissions - Xem quyền truy cập]
-    NguoiDung --> UC16[POST /api/v1/sharing-requests - Gửi yêu cầu chia sẻ]
-    NguoiDung --> UC17[GET /api/v1/sharing-requests - Xem yêu cầu chia sẻ]
-    NguoiDung --> UC18[POST /api/v1/sharing-requests/:id/approve - Duyệt yêu cầu]
-    NguoiDung --> UC19[POST /api/v1/sharing-requests/:id/reject - Từ chối yêu cầu]
+    NguoiDung --> UC1["POST /api/v1/auth/register - Đăng ký tài khoản"]
+    NguoiDung --> UC2["POST /api/v1/auth/login - Đăng nhập"]
+    NguoiDung --> UC3["GET /api/v1/auth/me - Xem thông tin hiện tại"]
+    NguoiDung --> UC4["POST /api/v1/auth/logout - Đăng xuất"]
 
-    QuanTriVien --> UC20[GET /api/v1/users - Quản lý người dùng]
-    QuanTriVien --> UC21[PATCH /api/v1/users/:id/role - Đổi vai trò]
-    QuanTriVien --> UC22[GET /api/v1/users/audit/export - Xuất nhật ký]
-    QuanTriVien --> UC23[Thực thi quyền quản trị]
+    NguoiDung --> UC5["GET /api/v1/folders - Xem danh sách thư mục"]
+    NguoiDung --> UC6["POST /api/v1/folders - Tạo thư mục"]
+    NguoiDung --> UC7["PATCH /api/v1/folders/:id - Cập nhật thư mục"]
+    NguoiDung --> UC8["DELETE /api/v1/folders/:id - Xóa thư mục"]
 
-    HeThong --> UC24[Xác thực JWT Bearer]
-    HeThong --> UC25[Kiểm tra quyền truy cập tài liệu]
-    HeThong --> UC26[Lưu dữ liệu vào PostgreSQL]
+    NguoiDung --> UC9["POST /api/v1/documents/upload - Upload tài liệu"]
+    NguoiDung --> UC10["GET /api/v1/documents - Xem danh sách tài liệu"]
+    NguoiDung --> UC11["GET /api/v1/documents/:id - Xem chi tiết tài liệu"]
+    NguoiDung --> UC12["PATCH /api/v1/documents/:id - Cập nhật tài liệu"]
+    NguoiDung --> UC13["POST /api/v1/documents/:id/move - Di chuyển tài liệu"]
+    NguoiDung --> UC14["DELETE /api/v1/documents/:id - Xóa tài liệu"]
+
+    NguoiDung --> UC15["GET /api/v1/permissions - Xem quyền truy cập"]
+
+    NguoiDung --> UC16["POST /api/v1/sharing-requests - Gửi yêu cầu chia sẻ"]
+    NguoiDung --> UC17["GET /api/v1/sharing-requests - Xem yêu cầu chia sẻ"]
+    NguoiDung --> UC18["POST /api/v1/sharing-requests/:id/approve - Duyệt yêu cầu"]
+    NguoiDung --> UC19["POST /api/v1/sharing-requests/:id/reject - Từ chối yêu cầu"]
+
+    QuanTriVien --> UC20["GET /api/v1/users - Quản lý người dùng"]
+    QuanTriVien --> UC21["PATCH /api/v1/users/:id/role - Đổi vai trò"]
+    QuanTriVien --> UC22["GET /api/v1/users/audit/export - Xuất nhật ký"]
+    QuanTriVien --> UC23["Thực thi quyền quản trị"]
+
+    HeThong --> UC24["Xác thực JWT Bearer"]
+    HeThong --> UC25["Kiểm tra quyền truy cập tài liệu"]
+    HeThong --> UC26["Lưu dữ liệu vào PostgreSQL"]
 ```
 
 ## 2) Biểu đồ Trình tự
