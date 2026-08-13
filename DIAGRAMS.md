@@ -4,9 +4,9 @@
 
 ```mermaid
 flowchart LR
-    actor User
-    actor Admin
-    actor System
+    User([User])
+    Admin([Admin])
+    System([System])
 
     User --> UC1[POST /api/v1/auth/register]
     User --> UC2[POST /api/v1/auth/login]
@@ -39,6 +39,7 @@ flowchart LR
     System --> UC27[Permission checks on document access]
     System --> UC28[Database persistence in PostgreSQL]
 ```
+
 
 ## 2) Sequence Diagram
 
