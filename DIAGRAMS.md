@@ -1,6 +1,6 @@
 # Sơ đồ kiến trúc VaultSystem
 
-## 1) Biểu đồ Use Case
+## 1) Biểu đồ Use Case - Use Case Diagram
 
 ```mermaid
 flowchart LR
@@ -41,7 +41,7 @@ flowchart LR
     HeThong --> UC26["Lưu dữ liệu vào PostgreSQL"]
 ```
 
-## 2) Biểu đồ Trình tự
+## 2) Biểu đồ Trình tự - Sequence Diagram
 
 ```mermaid
 sequenceDiagram
@@ -101,7 +101,7 @@ sequenceDiagram
     API-->>Frontend: Danh sách người dùng, kết quả đổi role, file CSV nhật ký
 ```
 
-## 3) Biểu đồ Lớp
+## 3) Biểu đồ Lớp - Class Diagram
 
 > Lưu ý: phần tài liệu trong mã nguồn hiện chủ yếu thể hiện qua `DocumentManageService` và `DocumentManage` entity. Các controller bên dưới phản ánh đúng các lớp đang có trong codebase; riêng luồng tài liệu được mô hình hóa theo service/entity hiện hành.
 
@@ -428,7 +428,7 @@ classDiagram
     DocumentManage "1" --> "0..*" SharingRequestManager
 ```
 
-## 4) Biểu đồ Hoạt động
+## 4) Biểu đồ Hoạt động - Activity Diagram
 
 ```mermaid
 flowchart TD
@@ -472,7 +472,7 @@ flowchart TD
     AD --> AE[Kết thúc phiên làm việc]
 ```
 
-## 5) Sơ đồ tổng quan ứng dụng
+## 5) Sơ đồ tổng quan ứng dụng - Application Flowchart
 
 ```mermaid
 flowchart LR
