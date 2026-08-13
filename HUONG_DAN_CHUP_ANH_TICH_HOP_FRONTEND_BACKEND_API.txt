@@ -1,0 +1,119 @@
+HUONG DAN CHUP ANH CHO PHAN TICH HOP FRONTEND VA BACKEND QUA API
+=================================================================
+
+Muc tieu:
+- Chung minh duoc frontend va backend ket noi voi nhau qua REST API.
+- The hien ro luong: UI -> API layer frontend -> endpoint backend -> phan hoi.
+- Hinh anh gon, de hieu, dung trong bao cao tot nghiep.
+
+I. BAN CHUP NEN CO (THEO THU TU)
+--------------------------------
+
+1) Hinh 1 - Cau truc thu muc the hien tach lop
+- Mo VS Code Explorer.
+- Chup khung ben trai co cac muc:
+  - src/lib/api
+  - src/hooks
+  - src/routes
+  - spring-boot-modules/authManagement
+  - spring-boot-modules/folderManagement
+  - spring-boot-modules/permissionManagement
+  - spring-boot-modules/sharingRequestManagement
+- Muc dich: chung minh kien truc tach frontend-backend va module hoa.
+
+2) Hinh 2 - Lop API trung tam cua frontend
+- Mo file src/lib/api/client.ts.
+- Chup doan code co:
+  - BASE_URL (hoac VITE_API_BASE_URL)
+  - axios.create(...)
+  - gan Authorization Bearer token o interceptor
+- Muc dich: cho thay tat ca request frontend di qua 1 client chung.
+
+3) Hinh 3 - Frontend goi endpoint xac thuc
+- Mo file src/lib/api/auth.ts.
+- Chup cac ham:
+  - register()
+  - login()
+  - me()
+  - logout()
+- Muc dich: chung minh frontend goi endpoint auth that su.
+
+4) Hinh 4 - Frontend goi endpoint tai lieu
+- Mo file src/lib/api/documents.ts.
+- Chup cac ham:
+  - list()
+  - get()
+  - upload() (FormData + multipart/form-data)
+  - download()
+- Muc dich: chung minh luong nghiep vu tai lieu di qua API.
+
+5) Hinh 5 - Backend nhan va xu ly auth API
+- Mo file spring-boot-modules/authManagement/AuthController.java.
+- Chup cac endpoint:
+  - POST /api/v1/auth/register
+  - POST /api/v1/auth/login
+  - GET /api/v1/auth/me
+- Muc dich: doi chieu voi hinh phia frontend.
+
+6) Hinh 6 - Backend xu ly logic nghiep vu
+- Mo file spring-boot-modules/documentManagement/DocumentManageService.java.
+- Chup phan xu ly:
+  - createDocument(...)
+  - gan owner/permission
+  - xu ly metadata
+- Muc dich: chung minh backend xu ly business logic, frontend chi gui request.
+
+7) Hinh 7 - Bang chung request thuc te (khuyen nghi manh)
+- Chay app, mo DevTools > Network.
+- Thuc hien login hoac upload file.
+- Chup request co:
+  - URL endpoint
+  - Method (POST/GET/PATCH...)
+  - Status code (200/401/...)
+  - Header Authorization (co the an bot token)
+- Muc dich: bang chung thuc nghiem frontend va backend da ket noi.
+
+II. CACH CHUP DE DEP VA DE CHAM
+-------------------------------
+
+- Moi hinh chi nen nhan 1 y chinh, khong nhoi qua nhieu noi dung.
+- Crop dung vung quan trong (endpoint, header, ham API), bo phan du thua.
+- Neu token lo dai, che bot chuoi token de bao mat.
+- Dung cung mot muc zoom (khoang 110% - 125%) de bo cuc dong nhat.
+- Nen danh so hinh theo thu tu xuat hien trong bai viet.
+
+III. GOI Y TEN HINH VA CHU THICH
+--------------------------------
+
+- Hinh 2.6.3.1: Cau truc module frontend va backend trong du an
+- Hinh 2.6.3.2: Cau hinh API client trung tam (baseURL va Bearer token)
+- Hinh 2.6.3.3: Frontend goi API xac thuc (register/login/me)
+- Hinh 2.6.3.4: Frontend goi API tai lieu (list/upload/download)
+- Hinh 2.6.3.5: Backend AuthController xu ly endpoint xac thuc
+- Hinh 2.6.3.6: Backend service xu ly nghiep vu tai lieu
+- Hinh 2.6.3.7: Request thuc te tren Network tab
+
+Mau chu thich ngan gon:
+"Hinh 2.6.3.X mo ta frontend gui request den backend thong qua lop API trung tam va backend tra ket qua theo chuan REST."
+
+IV. BO CUC DAT HINH TRONG BAO CAO
+----------------------------------
+
+- Cach 1 (de doc):
+  - Viet 1 doan ngan (3-5 dong) -> Dat 1 hinh minh hoa -> Nhan xet 1-2 cau.
+- Cach 2 (nhanh gon):
+  - Gom 2 hinh lien quan thanh cap:
+    - (Frontend API code) + (Backend endpoint code)
+  - Ben duoi la 1 caption chung.
+
+V. NHUNG LOI HAY GAP CAN TRANH
+------------------------------
+
+- Chup nguyen file qua dai, nguoi doc khong biet ban muon nhan manh gi.
+- Khong co hinh request thuc te (chi co code) lam mat tinh thuyet phuc.
+- Caption qua chung chung, khong noi duoc y nghia tich hop API.
+- De lo token day du trong hinh.
+
+KET LUAN NGAN CHO MUC NAY
+-------------------------
+Bo hinh ly tuong cho phan tich hop API la: 1 hinh cau truc + 2-3 hinh frontend API + 1-2 hinh backend endpoint/service + 1 hinh request thuc te. Bo cuc nay du de chung minh ket noi frontend-backend ro rang, dung trong tam va de dat diem phan bao cao ky thuat.
