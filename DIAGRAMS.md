@@ -1,118 +1,257 @@
-# VaultSystem Architecture Diagrams
+# Sơ đồ kiến trúc VaultSystem
 
-## 1) Use Case Diagram
+## 1) Biểu đồ Use Case
 
 ```mermaid
 flowchart LR
-    actor User
-    actor Admin
-    actor System
+    NguoiDung([Người dùng])
+    QuanTriVien([Quản trị viên])
+    HeThong([Hệ thống])
 
-    User --> UC1[POST /api/v1/auth/register]
-    User --> UC2[POST /api/v1/auth/login]
-    User --> UC3[GET /api/v1/auth/me]
-    User --> UC4[POST /api/v1/auth/logout]
-    User --> UC5[GET /api/v1/folders]
-    User --> UC6[POST /api/v1/folders]
-    User --> UC7[PATCH /api/v1/folders/:id]
-    User --> UC8[DELETE /api/v1/folders/:id]
-    User --> UC9[POST /api/v1/documents/upload]
-    User --> UC10[GET /api/v1/documents]
-    User --> UC11[GET /api/v1/documents/:id]
-    User --> UC12[PATCH /api/v1/documents/:id]
-    User --> UC13[POST /api/v1/documents/:id/move]
-    User --> UC14[DELETE /api/v1/documents/:id]
-    User --> UC15[GET /api/v1/permissions]
-    User --> UC16[POST /api/v1/sharing-requests]
-    User --> UC17[GET /api/v1/sharing-requests]
-    User --> UC18[PATCH /api/v1/sharing-requests/:id/approve]
-    User --> UC19[PATCH /api/v1/sharing-requests/:id/reject]
-    User --> UC20[GET /api/v1/users]
-    User --> UC21[PATCH /api/v1/users/:id/role]
-    User --> UC22[GET /api/v1/users/audit/export]
+    NguoiDung --> UC1[POST /api/v1/auth/register - Đăng ký tài khoản]
+    NguoiDung --> UC2[POST /api/v1/auth/login - Đăng nhập]
+    NguoiDung --> UC3[GET /api/v1/auth/me - Xem thông tin hiện tại]
+    NguoiDung --> UC4[POST /api/v1/auth/logout - Đăng xuất]
+    NguoiDung --> UC5[GET /api/v1/folders - Xem danh sách thư mục]
+    NguoiDung --> UC6[POST /api/v1/folders - Tạo thư mục]
+    NguoiDung --> UC7[PATCH /api/v1/folders/:id - Cập nhật thư mục]
+    NguoiDung --> UC8[DELETE /api/v1/folders/:id - Xóa thư mục]
+    NguoiDung --> UC9[POST /api/v1/documents/upload - Upload tài liệu]
+    NguoiDung --> UC10[GET /api/v1/documents - Xem danh sách tài liệu]
+    NguoiDung --> UC11[GET /api/v1/documents/:id - Xem chi tiết tài liệu]
+    NguoiDung --> UC12[PATCH /api/v1/documents/:id - Cập nhật tài liệu]
+    NguoiDung --> UC13[POST /api/v1/documents/:id/move - Di chuyển tài liệu]
+    NguoiDung --> UC14[DELETE /api/v1/documents/:id - Xóa tài liệu]
+    NguoiDung --> UC15[GET /api/v1/permissions - Xem quyền truy cập]
+    NguoiDung --> UC16[POST /api/v1/sharing-requests - Gửi yêu cầu chia sẻ]
+    NguoiDung --> UC17[GET /api/v1/sharing-requests - Xem yêu cầu chia sẻ]
+    NguoiDung --> UC18[POST /api/v1/sharing-requests/:id/approve - Duyệt yêu cầu]
+    NguoiDung --> UC19[POST /api/v1/sharing-requests/:id/reject - Từ chối yêu cầu]
 
-    Admin --> UC23[Admin-only role enforcement]
-    Admin --> UC24[User governance and role changes]
-    Admin --> UC25[Audit log export]
+    QuanTriVien --> UC20[GET /api/v1/users - Quản lý người dùng]
+    QuanTriVien --> UC21[PATCH /api/v1/users/:id/role - Đổi vai trò]
+    QuanTriVien --> UC22[GET /api/v1/users/audit/export - Xuất nhật ký]
+    QuanTriVien --> UC23[Thực thi quyền quản trị]
 
-    System --> UC26[JWT bearer validation]
-    System --> UC27[Permission checks on document access]
-    System --> UC28[Database persistence in PostgreSQL]
+    HeThong --> UC24[Xác thực JWT Bearer]
+    HeThong --> UC25[Kiểm tra quyền truy cập tài liệu]
+    HeThong --> UC26[Lưu dữ liệu vào PostgreSQL]
 ```
 
-## 2) Sequence Diagram
+## 2) Biểu đồ Trình tự
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User
-    participant Frontend as Vite React Frontend
-    participant API as Spring Boot API
+    actor NguoiDung as Người dùng
+    participant Frontend as Frontend React + Vite
+    participant API as Backend Spring Boot
     participant Auth as AuthService / JwtService
-    participant DB as PostgreSQL Database
+    participant TaiLieu as DocumentManageService
+    participant ThuMuc as FolderManagerService
+    participant ChiaSe as SharingRequestManagerService
+    participant Quyen as PermissionManagerService
+    participant CSDL as PostgreSQL
 
-    User->>Frontend: Enter email/password
-    Frontend->>API: POST /api/v1/auth/register
-    API->>Auth: Validate registration input
-    Auth->>DB: Check if email exists
-    DB-->>Auth: User status
-    Auth->>DB: Insert new user record
-    Auth-->>API: JWT token + user profile
-    API-->>Frontend: AuthResponse
-    Frontend->>Frontend: Save token to localStorage
+    NguoiDung->>Frontend: Nhập thông tin đăng ký / đăng nhập
+    Frontend->>API: POST /api/v1/auth/register hoặc POST /api/v1/auth/login
+    API->>Auth: Kiểm tra dữ liệu và xác thực mật khẩu
+    Auth->>CSDL: Tìm người dùng theo email / lưu người dùng mới
+    CSDL-->>Auth: Trả về bản ghi người dùng
+    Auth-->>API: Trả về JWT token và thông tin người dùng
+    API-->>Frontend: AuthResponseDto
+    Frontend->>Frontend: Lưu token vào localStorage
 
-    User->>Frontend: Login
-    Frontend->>API: POST /api/v1/auth/login
-    API->>Auth: Validate credentials
-    Auth->>DB: Fetch user by email
-    DB-->>Auth: User row
-    Auth-->>API: JWT token
-    API-->>Frontend: AuthResponse
+    NguoiDung->>Frontend: Mở trang thư mục / tài liệu
+    Frontend->>API: GET /api/v1/folders hoặc GET /api/v1/documents
+    API->>Auth: Giải mã token và lấy user hiện tại
+    API->>ThuMuc: Lấy danh sách thư mục theo owner
+    API->>TaiLieu: Lấy danh sách tài liệu theo quyền truy cập
+    ThuMuc-->>API: Danh sách thư mục
+    TaiLieu-->>API: Danh sách tài liệu
+    API-->>Frontend: Dữ liệu để hiển thị giao diện
 
-    User->>Frontend: Upload document
-    Frontend->>API: POST /api/v1/documents/upload (Bearer token)
-    API->>Auth: Validate bearer token
-    API->>DB: Save document + metadata + owner
-    DB-->>API: Created document row
-    API-->>Frontend: Document payload
+    NguoiDung->>Frontend: Upload file
+    Frontend->>API: POST /api/v1/documents/upload (multipart/form-data)
+    API->>Auth: Kiểm tra JWT Bearer
+    API->>TaiLieu: Tạo tài liệu mới, gán owner và metadata
+    TaiLieu->>CSDL: Lưu file_data, metadata, folder_id, owner_id
+    TaiLieu->>Quyen: Tạo quyền Owner cho người upload
+    Quyen->>CSDL: Lưu bản ghi permissions
+    API-->>Frontend: Thông tin tài liệu vừa tạo
 
-    User->>Frontend: Create folder
-    Frontend->>API: POST /api/v1/folders (Bearer token)
-    API->>DB: Save folder with owner_id
-    API-->>Frontend: Folder response
+    NguoiDung->>Frontend: Gửi yêu cầu chia sẻ
+    Frontend->>API: POST /api/v1/sharing-requests
+    API->>ChiaSe: Tạo yêu cầu chia sẻ ở trạng thái Pending
+    ChiaSe->>CSDL: Lưu sharing request
+    API-->>Frontend: Phản hồi trạng thái yêu cầu
 
-    User->>Frontend: Request sharing
-    Frontend->>API: POST /api/v1/sharing-requests (Bearer token)
-    API->>DB: Create pending sharing request
-    DB-->>API: Request saved
-    API-->>Frontend: Sharing request status
+    NguoiDung->>Frontend: Duyệt hoặc từ chối yêu cầu
+    Frontend->>API: POST /api/v1/sharing-requests/:id/approve hoặc /reject
+    API->>ChiaSe: Cập nhật trạng thái Approved / Rejected
+    ChiaSe->>Quyen: Tạo hoặc cập nhật quyền truy cập tương ứng
+    Quyen->>CSDL: Lưu quyền mới
+    API-->>Frontend: Kết quả xử lý
 
-    User->>Frontend: Approve request
-    Frontend->>API: PATCH /api/v1/sharing-requests/:id/approve (Bearer token)
-    API->>DB: Update status to Approved
-    API->>DB: Upsert permission record
-    API-->>Frontend: Approved response
-
-    Admin->>Frontend: View users
-    Frontend->>API: GET /api/v1/users (Bearer token)
-    API->>Auth: Validate role
-    API->>DB: Query all users
-    API-->>Frontend: User list
-
-    Admin->>Frontend: Export audit logs
-    Frontend->>API: GET /api/v1/users/audit/export (Bearer token)
-    API-->>Frontend: CSV file
+    QuanTriVien->>Frontend: Quản lý người dùng / vai trò
+    Frontend->>API: GET /api/v1/users, PATCH /api/v1/users/:id/role, GET /api/v1/users/audit/export
+    API-->>Frontend: Danh sách người dùng, kết quả đổi role, file CSV nhật ký
 ```
 
-## 3) Class Diagram
+## 3) Biểu đồ Lớp
+
+> Lưu ý: phần tài liệu trong mã nguồn hiện chủ yếu thể hiện qua `DocumentManageService` và `DocumentManage` entity. Các controller bên dưới phản ánh đúng các lớp đang có trong codebase; riêng luồng tài liệu được mô hình hóa theo service/entity hiện hành.
 
 ```mermaid
 classDiagram
     class AuthController {
-        +POST /api/v1/auth/register
-        +POST /api/v1/auth/login
-        +GET /api/v1/auth/me
-        +POST /api/v1/auth/logout
+        -AuthService authService
+        -JwtService jwtService
+        +register(request: RegisterRequest) ResponseEntity
+        +login(request: LoginRequest) ResponseEntity
+        +getCurrentUser(authHeader: String) ResponseEntity
+        +logout(authHeader: String) ResponseEntity
+        +forgotPassword(body: Map~String,String~) ResponseEntity
+        +resetPassword(body: Map~String,String~) ResponseEntity
+        -extractToken(authHeader: String) String
+    }
+
+    class AuthService {
+        -UserManagerRepository userRepository
+        -JwtService jwtService
+        -PasswordEncoder passwordEncoder
+        +register(request: RegisterRequest) AuthResponseDto
+        +login(request: LoginRequest) AuthResponseDto
+        +getCurrentUser(token: String) UserManager
+        +logout(token: String) void
+        -toUserManager(user: UserManager) UserManager
+    }
+
+    class JwtService {
+        -String jwtSecret
+        -long jwtExpirationMs
+        +generateToken(user: UserManager) String
+        +extractUserId(token: String) Integer
+        +extractRole(token: String) String
+        +isTokenValid(token: String) boolean
+        -extractAllClaims(token: String) Claims
+        -getSigningKey() SecretKey
+    }
+
+    class FolderManagerController {
+        -FolderManagerService folderManagerService
+        -AuthService authService
+        -JwtService jwtService
+        +getAllFolders(authorization: String) List~FolderManager~
+        +getFolderById(id: Integer, authorization: String) FolderManager
+        +createFolder(folder: FolderManager, authorization: String) FolderManager
+        +updateFolder(id: Integer, folder: FolderManager, authorization: String) FolderManager
+        +deleteFolder(id: Integer, authorization: String) void
+        -extractToken(authHeader: String) String
+        -currentUserIdFromHeader(authorization: String) Integer
+    }
+
+    class FolderManagerService {
+        -FolderManagerRepository folderManagerRepository
+        -UserManagerRepository userManagerRepository
+        +getAllFolders(currentUserId: Integer) List~FolderManager~
+        +getFolderById(id: Integer, currentUserId: Integer) FolderManager
+        +createFolder(folder: FolderManager, currentUserId: Integer) FolderManager
+        +updateFolder(id: Integer, updatedFolder: FolderManager, currentUserId: Integer) FolderManager
+        +deleteFolderById(id: Integer, currentUserId: Integer) void
+    }
+
+    class PermissionManagerController {
+        -PermissionManagerService permissionManagerService
+        +getPermissions(docId: Integer, userId: Integer) List~PermissionResponseDto~
+        +getPermissionById(id: Integer) PermissionResponseDto
+        +createPermission(request: PermissionCreateRequest) PermissionResponseDto
+        +updatePermission(id: Integer, request: PermissionUpdateRequest) PermissionResponseDto
+        +deletePermission(id: Integer) void
+    }
+
+    class PermissionManagerService {
+        -PermissionManagerRepository permissionManagerRepository
+        -DocumentManageRepository documentManageRepository
+        -UserManagerRepository userManagerRepository
+        +getAllPermissions() List~PermissionManager~
+        +getPermissionsByDocumentId(docId: Integer) List~PermissionManager~
+        +getPermissionByDocumentAndUser(docId: Integer, userId: Integer) Optional~PermissionManager~
+        +getPermissions(docId: Integer, userId: Integer) List~PermissionManager~
+        +getPermissionById(id: Integer) PermissionManager
+        +createPermission(docId: Integer, userId: Integer, accessType: String) PermissionManager
+        +updatePermission(id: Integer, accessType: String) PermissionManager
+        +deletePermissionById(id: Integer) void
+        +toDto(p: PermissionManager) PermissionResponseDto
+        -normalizeAccessType(raw: String) String
+    }
+
+    class SharingRequestManagerController {
+        -SharingRequestManagerService sharingRequestManagerService
+        -JwtService jwtService
+        +getSharingRequests(authHeader: String, status: String, docId: Integer) List~SharingRequestResponseDto~
+        +getSharingRequestById(id: Integer) SharingRequestResponseDto
+        +createSharingRequest(authHeader: String, request: SharingRequestCreateRequest) SharingRequestResponseDto
+        +approveSharingRequest(authHeader: String, id: Integer) SharingRequestResponseDto
+        +rejectSharingRequest(authHeader: String, id: Integer) SharingRequestResponseDto
+        +handleIllegalArgument(ex: IllegalArgumentException) ResponseEntity
+        -extractToken(authHeader: String) String
+    }
+
+    class SharingRequestManagerService {
+        -SharingRequestManagerRepository sharingRequestManagerRepository
+        -DocumentManageRepository documentManageRepository
+        -UserManagerRepository userManagerRepository
+        -PermissionManagerRepository permissionManagerRepository
+        +getAllSharingRequests() List~SharingRequestManager~
+        +getSharingRequestsByStatus(status: String) List~SharingRequestManager~
+        +getSharingRequestsByDocumentId(docId: Integer) List~SharingRequestManager~
+        +getSharingRequestsByStatusAndDocumentId(status: String, docId: Integer) List~SharingRequestManager~
+        +getIncomingRequests(actorUserId: Integer, status: String, docId: Integer) List~SharingRequestManager~
+        +getSharingRequestById(id: Integer) SharingRequestManager
+        +createSharingRequest(docId: Integer, recipientUserId: Integer, permission: String, actorUserId: Integer) SharingRequestManager
+        +approveSharingRequest(id: Integer, actorUserId: Integer) SharingRequestManager
+        +rejectSharingRequest(id: Integer, actorUserId: Integer) SharingRequestManager
+        +toDto(r: SharingRequestManager) SharingRequestResponseDto
+        -normalizeStatus(raw: String) String
+        -normalizeAccessType(raw: String) String
+    }
+
+    class UserManagerController {
+        -UserManagerService userManagerService
+        +getAllUsers(q: String) List~UserManager~
+        +getUserById(id: Integer) UserManager
+        +exportAuditLogs() ResponseEntity
+        +updateUserRole(id: Integer, user: UserManager) UserManager
+        +deleteUser(id: Integer) void
+    }
+
+    class UserManagerService {
+        -UserManagerRepository userManagerRepository
+        +getAllUsers() List~UserManager~
+        +getUserById(id: Integer) UserManager
+        +createUser(user: UserManager) UserManager
+        +updateUser(id: Integer, updatedUser: UserManager) UserManager
+        +deleteUserById(id: Integer) void
+    }
+
+    class DocumentManageService {
+        -DocumentManageRepository documentManageRepository
+        -FolderManagerRepository folderManagerRepository
+        -UserManagerRepository userManagerRepository
+        -PermissionManagerRepository permissionManagerRepository
+        +getDocuments(currentUserId: Integer, folderId: Integer, q: String) List~DocumentManage~
+        +searchDocuments(currentUserId: Integer, q: String) List~DocumentManage~
+        +getDocumentById(id: Integer, currentUserId: Integer) DocumentManage
+        +createDocument(file: MultipartFile, folderId: Integer, title: String, currentUserId: Integer) DocumentManage
+        +updateDocument(id: Integer, updatedDocument: DocumentManage, currentUserId: Integer) DocumentManage
+        +moveDocument(id: Integer, folderId: Integer, currentUserId: Integer) DocumentManage
+        +deleteDocumentById(id: Integer, currentUserId: Integer) void
+        -resolveAccessType(doc: DocumentManage, userId: Integer) String
+        -requireCanView(doc: DocumentManage, userId: Integer) void
+        -requireCanEdit(doc: DocumentManage, userId: Integer) void
+        -requireIsOwner(doc: DocumentManage, userId: Integer) void
+        -isAdmin(user: UserManager) boolean
     }
 
     class UserManager {
@@ -122,17 +261,33 @@ classDiagram
         +String password
         +String role
         +LocalDateTime createdAt
-        +List<DocumentManage> documents
-        +List<FolderManager> folders
-        +List<PermissionManager> permissions
-        +List<SharingRequestManager> sharingRequests
-    }
-
-    class FolderController {
-        +GET /api/v1/folders
-        +POST /api/v1/folders
-        +PATCH /api/v1/folders/:id
-        +DELETE /api/v1/folders/:id
+        +List~DocumentManage~ documents
+        +List~FolderManager~ folders
+        +List~PermissionManager~ permissions
+        +List~SharingRequestManager~ sharingRequests
+        +UserManager()
+        +UserManager(userId: Integer, name: String, email: String, role: String, createdAt: LocalDateTime)
+        +UserManager(name: String, email: String, password: String, role: String)
+        +getUserId() Integer
+        +setUserId(userId: Integer) void
+        +getName() String
+        +setName(name: String) void
+        +getEmail() String
+        +setEmail(email: String) void
+        +getPassword() String
+        +setPassword(password: String) void
+        +getRole() String
+        +setRole(role: String) void
+        +getCreatedAt() LocalDateTime
+        +setCreatedAt(createdAt: LocalDateTime) void
+        +getDocuments() List~DocumentManage~
+        +setDocuments(documents: List~DocumentManage~) void
+        +getFolders() List~FolderManager~
+        +setFolders(folders: List~FolderManager~) void
+        +getPermissions() List~PermissionManager~
+        +setPermissions(permissions: List~PermissionManager~) void
+        +getSharingRequests() List~SharingRequestManager~
+        +setSharingRequests(sharingRequests: List~SharingRequestManager~) void
     }
 
     class FolderManager {
@@ -140,16 +295,19 @@ classDiagram
         +String name
         +LocalDateTime createdAt
         +UserManager owner
-        +List<DocumentManage> documents
-    }
-
-    class DocumentController {
-        +GET /api/v1/documents
-        +GET /api/v1/documents/:id
-        +POST /api/v1/documents/upload
-        +PATCH /api/v1/documents/:id
-        +POST /api/v1/documents/:id/move
-        +DELETE /api/v1/documents/:id
+        +List~DocumentManage~ documents
+        +FolderManager()
+        +FolderManager(name: String, owner: UserManager)
+        +getFolderId() Integer
+        +setFolderId(folderId: Integer) void
+        +getName() String
+        +setName(name: String) void
+        +getCreatedAt() LocalDateTime
+        +setCreatedAt(createdAt: LocalDateTime) void
+        +getOwner() UserManager
+        +setOwner(owner: UserManager) void
+        +getDocuments() List~DocumentManage~
+        +setDocuments(documents: List~DocumentManage~) void
     }
 
     class DocumentManage {
@@ -163,14 +321,28 @@ classDiagram
         +String contentType
         +UserManager owner
         +FolderManager folder
-        +List<PermissionManager> permissions
-        +List<SharingRequestManager> sharingRequests
-    }
-
-    class PermissionController {
-        +GET /api/v1/permissions
-        +PATCH /api/v1/permissions/:id
-        +DELETE /api/v1/permissions/:id
+        +List~PermissionManager~ permissions
+        +List~SharingRequestManager~ sharingRequests
+        +DocumentManage()
+        +DocumentManage(title: String, metadata: Map, owner: UserManager)
+        +getDocId() Integer
+        +setDocId(docId: Integer) void
+        +getTitle() String
+        +setTitle(title: String) void
+        +getMetadata() Map
+        +setMetadata(metadata: Map) void
+        +getCreatedAt() LocalDateTime
+        +setCreatedAt(createdAt: LocalDateTime) void
+        +getUpdatedAt() LocalDateTime
+        +setUpdatedAt(updatedAt: LocalDateTime) void
+        +getOwner() UserManager
+        +setOwner(owner: UserManager) void
+        +getFolder() FolderManager
+        +setFolder(folder: FolderManager) void
+        +getPermissions() List~PermissionManager~
+        +setPermissions(permissions: List~PermissionManager~) void
+        +getSharingRequests() List~SharingRequestManager~
+        +setSharingRequests(sharingRequests: List~SharingRequestManager~) void
     }
 
     class PermissionManager {
@@ -178,13 +350,16 @@ classDiagram
         +String accessType
         +DocumentManage document
         +UserManager user
-    }
-
-    class SharingRequestController {
-        +GET /api/v1/sharing-requests
-        +POST /api/v1/sharing-requests
-        +PATCH /api/v1/sharing-requests/:id/approve
-        +PATCH /api/v1/sharing-requests/:id/reject
+        +PermissionManager()
+        +PermissionManager(accessType: String, document: DocumentManage, user: UserManager)
+        +getPermId() Integer
+        +setPermId(permId: Integer) void
+        +getAccessType() String
+        +setAccessType(accessType: String) void
+        +getDocument() DocumentManage
+        +setDocument(document: DocumentManage) void
+        +getUser() UserManager
+        +setUser(user: UserManager) void
     }
 
     class SharingRequestManager {
@@ -196,57 +371,49 @@ classDiagram
         +DocumentManage document
         +UserManager user
         +UserManager sharingUser
-    }
-
-    class UserController {
-        +GET /api/v1/users
-        +GET /api/v1/users/:id
-        +PATCH /api/v1/users/:id/role
-        +DELETE /api/v1/users/:id
-        +GET /api/v1/users/audit/export
-    }
-
-    class AuthService {
-        +register(request)
-        +login(request)
-        +getCurrentUser(token)
-        +logout(token)
-    }
-
-    class JwtService {
-        +generateToken(user)
-        +extractUserId(token)
-        +extractRole(token)
-        +isTokenValid(token)
-    }
-
-    class DocumentManageService {
-        +getDocuments(userId, folderId, q)
-        +createDocument(file, folderId, title, userId)
-        +moveDocument(id, folderId, userId)
-        +deleteDocumentById(id, userId)
-    }
-
-    class SharingRequestManagerService {
-        +createSharingRequest(docId, recipientUserId, permission, actorUserId)
-        +approveSharingRequest(id, actorUserId)
-        +rejectSharingRequest(id, actorUserId)
-    }
-
-    class UserManagerService {
-        +getAllUsers()
-        +getUserById(id)
-        +updateUser(id, user)
-        +deleteUserById(id)
+        +SharingRequestManager()
+        +SharingRequestManager(accessType: String, document: DocumentManage, user: UserManager, sharingUser: UserManager)
+        +getSharingReqId() Integer
+        +setSharingReqId(sharingReqId: Integer) void
+        +getAccessType() String
+        +setAccessType(accessType: String) void
+        +getStatus() String
+        +setStatus(status: String) void
+        +getCreatedAt() LocalDateTime
+        +setCreatedAt(createdAt: LocalDateTime) void
+        +getUpdatedAt() LocalDateTime
+        +setUpdatedAt(updatedAt: LocalDateTime) void
+        +getDocument() DocumentManage
+        +setDocument(document: DocumentManage) void
+        +getUser() UserManager
+        +setUser(user: UserManager) void
+        +getSharingUser() UserManager
+        +setSharingUser(sharingUser: UserManager) void
     }
 
     AuthController --> AuthService
+    AuthController --> JwtService
+    FolderManagerController --> FolderManagerService
+    FolderManagerController --> AuthService
+    FolderManagerController --> JwtService
+    PermissionManagerController --> PermissionManagerService
+    SharingRequestManagerController --> SharingRequestManagerService
+    SharingRequestManagerController --> JwtService
+    UserManagerController --> UserManagerService
+    DocumentManageService --> DocumentManage
+
+    AuthService --> UserManager
     AuthService --> JwtService
-    UserController --> UserManagerService
-    FolderController --> FolderManager
-    DocumentController --> DocumentManageService
-    SharingRequestController --> SharingRequestManagerService
-    PermissionController --> PermissionManager
+    FolderManagerService --> FolderManager
+    FolderManagerService --> UserManager
+    PermissionManagerService --> PermissionManager
+    PermissionManagerService --> DocumentManage
+    PermissionManagerService --> UserManager
+    SharingRequestManagerService --> SharingRequestManager
+    SharingRequestManagerService --> DocumentManage
+    SharingRequestManagerService --> UserManager
+    SharingRequestManagerService --> PermissionManager
+    UserManagerService --> UserManager
 
     UserManager "1" --> "0..*" DocumentManage
     UserManager "1" --> "0..*" FolderManager
@@ -258,67 +425,67 @@ classDiagram
     DocumentManage "1" --> "0..*" SharingRequestManager
 ```
 
-## 4) Activity Diagram
+## 4) Biểu đồ Hoạt động
 
 ```mermaid
 flowchart TD
-    A[User opens app] --> B{Authenticated?}
-    B -- No --> C[POST /api/v1/auth/register or POST /api/v1/auth/login]
-    C --> D[Submit credentials]
-    D --> E[Generate JWT token]
-    E --> F[Store token in frontend]
-    F --> G[Redirect to dashboard]
+    A[Người dùng mở ứng dụng] --> B{Đã xác thực chưa?}
+    B -- Chưa --> C[POST /api/v1/auth/register hoặc POST /api/v1/auth/login]
+    C --> D[Nhập thông tin đăng nhập / đăng ký]
+    D --> E[Backend tạo JWT token]
+    E --> F[Lưu token vào frontend]
+    F --> G[Đi tới dashboard]
 
-    B -- Yes --> G
-    G --> H[GET /api/v1/folders or GET /api/v1/documents]
-    H --> I{Action?}
+    B -- Rồi --> G
+    G --> H[GET /api/v1/folders hoặc GET /api/v1/documents]
+    H --> I{Người dùng chọn hành động gì?}
 
-    I -- Upload document --> J[POST /api/v1/documents/upload]
-    J --> K[Validate file and owner permissions]
-    K --> L[Save document to database]
-    L --> M[Create owner permission entry]
+    I -- Upload tài liệu --> J[POST /api/v1/documents/upload]
+    J --> K[Kiểm tra file và quyền sở hữu]
+    K --> L[Lưu file và metadata vào database]
+    L --> M[Tạo quyền Owner cho người upload]
 
-    I -- Create folder --> N[POST /api/v1/folders]
-    N --> O[Validate folder owner]
-    O --> P[Create folder record]
+    I -- Tạo thư mục --> N[POST /api/v1/folders]
+    N --> O[Kiểm tra quyền tạo thư mục]
+    O --> P[Lưu thư mục mới]
 
-    I -- Share document --> Q[POST /api/v1/sharing-requests]
-    Q --> R[Await approval]
-    R --> S{Request approved?}
-    S -- Yes --> T[PATCH /api/v1/sharing-requests/:id/approve]
-    T --> U[Create permission grant]
-    S -- No --> V[PATCH /api/v1/sharing-requests/:id/reject]
+    I -- Chia sẻ tài liệu --> Q[POST /api/v1/sharing-requests]
+    Q --> R[Chờ người nhận duyệt]
+    R --> S{Yêu cầu được duyệt không?}
+    S -- Có --> T[POST /api/v1/sharing-requests/:id/approve]
+    T --> U[Tạo hoặc cập nhật quyền truy cập]
+    S -- Không --> V[POST /api/v1/sharing-requests/:id/reject]
 
-    I -- Change role --> W[PATCH /api/v1/users/:id/role]
-    W --> X[Admin checks role update]
-    X --> Y[Update user role record]
+    I -- Đổi vai trò --> W[PATCH /api/v1/users/:id/role]
+    W --> X[Quản trị viên kiểm tra và cập nhật role]
+    X --> Y[Lưu role mới]
 
-    I -- Download document --> Z[GET /api/v1/documents/:id]
-    Z --> AA[Check permission and access rights]
-    AA --> AB[Return file bytes]
+    I -- Tải tài liệu --> Z[GET /api/v1/documents/:id]
+    Z --> AA[Kiểm tra quyền truy cập]
+    AA --> AB[Trả về dữ liệu file]
 
-    I -- Logout --> AC[POST /api/v1/auth/logout]
-    AC --> AD[Clear token from client]
-    AD --> AE[End session]
+    I -- Đăng xuất --> AC[POST /api/v1/auth/logout]
+    AC --> AD[Xóa token ở frontend]
+    AD --> AE[Kết thúc phiên làm việc]
 ```
 
-## 5) High-Level App Context
+## 5) Sơ đồ tổng quan ứng dụng
 
 ```mermaid
 flowchart LR
-    Frontend[React + Vite Frontend] --> AuthAPI[POST /api/v1/auth/register\nPOST /api/v1/auth/login\nGET /api/v1/auth/me]
-    Frontend --> FolderAPI[GET /api/v1/folders\nPOST /api/v1/folders]
-    Frontend --> DocAPI[GET /api/v1/documents\nPOST /api/v1/documents/upload\nPATCH /api/v1/documents/:id]
-    Frontend --> ShareAPI[POST /api/v1/sharing-requests\nPATCH /api/v1/sharing-requests/:id/approve]
-    Frontend --> UserAPI[GET /api/v1/users\nPATCH /api/v1/users/:id/role]
+    Frontend[Frontend React + Vite + TypeScript] --> AuthAPI[POST /api/v1/auth/register\nPOST /api/v1/auth/login\nGET /api/v1/auth/me\nPOST /api/v1/auth/logout]
+    Frontend --> FolderAPI[GET /api/v1/folders\nPOST /api/v1/folders\nPATCH /api/v1/folders/:id\nDELETE /api/v1/folders/:id]
+    Frontend --> DocAPI[GET /api/v1/documents\nPOST /api/v1/documents/upload\nGET /api/v1/documents/:id\nPATCH /api/v1/documents/:id\nPOST /api/v1/documents/:id/move\nDELETE /api/v1/documents/:id]
+    Frontend --> ShareAPI[GET /api/v1/sharing-requests\nPOST /api/v1/sharing-requests\nPOST /api/v1/sharing-requests/:id/approve\nPOST /api/v1/sharing-requests/:id/reject]
+    Frontend --> UserAPI[GET /api/v1/users\nPATCH /api/v1/users/:id/role\nGET /api/v1/users/audit/export]
 
-    AuthAPI --> API[Spring Boot Backend]
-    FolderAPI --> API
-    DocAPI --> API
-    ShareAPI --> API
-    UserAPI --> API
+    AuthAPI --> Backend[Backend Spring Boot]
+    FolderAPI --> Backend
+    DocAPI --> Backend
+    ShareAPI --> Backend
+    UserAPI --> Backend
 
-    API --> DB[PostgreSQL RDS]
-    API --> Files[Document bytea storage + metadata]
-    API --> JWT[JWT bearer token validation]
+    Backend --> Database[(PostgreSQL RDS)]
+    Backend --> FileStore[Lưu nội dung file / metadata]
+    Backend --> JWT[Xác thực JWT Bearer]
 ```
