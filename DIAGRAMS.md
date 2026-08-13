@@ -1,44 +1,46 @@
 # Sơ đồ kiến trúc VaultSystem
 
-## 1) Biểu đồ Use Case
+## 1) Use Case Diagram
 
 ```mermaid
 flowchart LR
-    NguoiDung([Người dùng])
-    QuanTriVien([Quản trị viên])
-    HeThong([Hệ thống])
+    actor User
+    actor Admin
+    actor System
 
-    NguoiDung --> UC1[POST /api/v1/auth/register - Đăng ký tài khoản]
-    NguoiDung --> UC2[POST /api/v1/auth/login - Đăng nhập]
-    NguoiDung --> UC3[GET /api/v1/auth/me - Xem thông tin hiện tại]
-    NguoiDung --> UC4[POST /api/v1/auth/logout - Đăng xuất]
-    NguoiDung --> UC5[GET /api/v1/folders - Xem danh sách thư mục]
-    NguoiDung --> UC6[POST /api/v1/folders - Tạo thư mục]
-    NguoiDung --> UC7[PATCH /api/v1/folders/:id - Cập nhật thư mục]
-    NguoiDung --> UC8[DELETE /api/v1/folders/:id - Xóa thư mục]
-    NguoiDung --> UC9[POST /api/v1/documents/upload - Upload tài liệu]
-    NguoiDung --> UC10[GET /api/v1/documents - Xem danh sách tài liệu]
-    NguoiDung --> UC11[GET /api/v1/documents/:id - Xem chi tiết tài liệu]
-    NguoiDung --> UC12[PATCH /api/v1/documents/:id - Cập nhật tài liệu]
-    NguoiDung --> UC13[POST /api/v1/documents/:id/move - Di chuyển tài liệu]
-    NguoiDung --> UC14[DELETE /api/v1/documents/:id - Xóa tài liệu]
-    NguoiDung --> UC15[GET /api/v1/permissions - Xem quyền truy cập]
-    NguoiDung --> UC16[POST /api/v1/sharing-requests - Gửi yêu cầu chia sẻ]
-    NguoiDung --> UC17[GET /api/v1/sharing-requests - Xem yêu cầu chia sẻ]
-    NguoiDung --> UC18[POST /api/v1/sharing-requests/:id/approve - Duyệt yêu cầu]
-    NguoiDung --> UC19[POST /api/v1/sharing-requests/:id/reject - Từ chối yêu cầu]
+    User --> UC1[POST /api/v1/auth/register]
+    User --> UC2[POST /api/v1/auth/login]
+    User --> UC3[GET /api/v1/auth/me]
+    User --> UC4[POST /api/v1/auth/logout]
+    User --> UC5[GET /api/v1/folders]
+    User --> UC6[POST /api/v1/folders]
+    User --> UC7[PATCH /api/v1/folders/:id]
+    User --> UC8[DELETE /api/v1/folders/:id]
+    User --> UC9[POST /api/v1/documents/upload]
+    User --> UC10[GET /api/v1/documents]
+    User --> UC11[GET /api/v1/documents/:id]
+    User --> UC12[PATCH /api/v1/documents/:id]
+    User --> UC13[POST /api/v1/documents/:id/move]
+    User --> UC14[DELETE /api/v1/documents/:id]
+    User --> UC15[GET /api/v1/permissions]
+    User --> UC16[POST /api/v1/sharing-requests]
+    User --> UC17[GET /api/v1/sharing-requests]
+    User --> UC18[PATCH /api/v1/sharing-requests/:id/approve]
+    User --> UC19[PATCH /api/v1/sharing-requests/:id/reject]
+    User --> UC20[GET /api/v1/users]
+    User --> UC21[PATCH /api/v1/users/:id/role]
+    User --> UC22[GET /api/v1/users/audit/export]
 
-    QuanTriVien --> UC20[GET /api/v1/users - Quản lý người dùng]
-    QuanTriVien --> UC21[PATCH /api/v1/users/:id/role - Đổi vai trò]
-    QuanTriVien --> UC22[GET /api/v1/users/audit/export - Xuất nhật ký]
-    QuanTriVien --> UC23[Thực thi quyền quản trị]
+    Admin --> UC23[Admin-only role enforcement]
+    Admin --> UC24[User governance and role changes]
+    Admin --> UC25[Audit log export]
 
-    HeThong --> UC24[Xác thực JWT Bearer]
-    HeThong --> UC25[Kiểm tra quyền truy cập tài liệu]
-    HeThong --> UC26[Lưu dữ liệu vào PostgreSQL]
+    System --> UC26[JWT bearer validation]
+    System --> UC27[Permission checks on document access]
+    System --> UC28[Database persistence in PostgreSQL]
 ```
 
-## 2) Biểu đồ Trình tự
+## 2) Sequence Diagram
 
 ```mermaid
 sequenceDiagram
@@ -93,14 +95,18 @@ sequenceDiagram
     Quyen->>CSDL: Lưu quyền mới
     API-->>Frontend: Kết quả xử lý
 
-    QuanTriVien->>Frontend: Quản lý người dùng / vai trò
-    Frontend->>API: GET /api/v1/users, PATCH /api/v1/users/:id/role, GET /api/v1/users/audit/export
-    API-->>Frontend: Danh sách người dùng, kết quả đổi role, file CSV nhật ký
+    Admin->>Frontend: View users
+    Frontend->>API: GET /api/v1/users (Bearer token)
+    API->>Auth: Validate role
+    API->>DB: Query all users
+    API-->>Frontend: User list
+
+    Admin->>Frontend: Export audit logs
+    Frontend->>API: GET /api/v1/users/audit/export (Bearer token)
+    API-->>Frontend: CSV file
 ```
 
-## 3) Biểu đồ Lớp
-
-> Lưu ý: phần tài liệu trong mã nguồn hiện chủ yếu thể hiện qua `DocumentManageService` và `DocumentManage` entity. Các controller bên dưới phản ánh đúng các lớp đang có trong codebase; riêng luồng tài liệu được mô hình hóa theo service/entity hiện hành.
+## 3) Class Diagram
 
 ```mermaid
 classDiagram
@@ -425,7 +431,7 @@ classDiagram
     DocumentManage "1" --> "0..*" SharingRequestManager
 ```
 
-## 4) Biểu đồ Hoạt động
+## 4) Activity Diagram
 
 ```mermaid
 flowchart TD
@@ -469,7 +475,7 @@ flowchart TD
     AD --> AE[Kết thúc phiên làm việc]
 ```
 
-## 5) Sơ đồ tổng quan ứng dụng
+## 5) High-Level App Context
 
 ```mermaid
 flowchart LR
