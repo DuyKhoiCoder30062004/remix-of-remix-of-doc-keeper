@@ -1,0 +1,74 @@
+KIẾN THỨC FRONTEND CƠ BẢN
+========================
+
+Trong dự án này, frontend được xây dựng bằng các công nghệ hiện đại nhằm mục tiêu tạo ra một giao diện trực quan, dễ sử dụng và có khả năng tương tác tốt với hệ thống backend. Frontend không chỉ đóng vai trò hiển thị giao diện mà còn phải thực hiện việc gửi yêu cầu API, xử lý dữ liệu do người dùng nhập, hiển thị kết quả trả về từ server và quản lý trạng thái người dùng trong ứng dụng.
+
+1. Công nghệ sử dụng trong frontend
+----------------------------------
+
+Frontend của hệ thống được xây dựng trên nền tảng Vite + React + TypeScript. Vite được dùng làm công cụ build và dev server, giúp quá trình phát triển nhanh hơn nhờ khả năng hot reload và đóng gói tài nguyên hiệu quả. React là thư viện giao diện phổ biến, hỗ trợ xây dựng các component tái sử dụng và tận dụng mô hình render dựa trên component. TypeScript được bổ sung để tăng tính an toàn của mã nguồn, giúp giảm lỗi khi phát triển và hỗ trợ kiểm tra kiểu dữ liệu rõ ràng hơn.
+
+Bên cạnh đó, ứng dụng còn sử dụng TanStack Router để quản lý định tuyến, TanStack Query để xử lý trạng thái dữ liệu từ API và giảm thiểu các thao tác gọi API lặp đi lặp lại. Tailwind CSS được dùng để thiết kế giao diện nhanh chóng, hiện đại và dễ kiểm soát layout, spacing, màu sắc cũng như responsive. Axios được sử dụng để thực hiện các yêu cầu HTTP tới backend theo các phương thức GET, POST, PUT, PATCH, DELETE.
+
+Về mặt kiến trúc, frontend được chia thành các module rõ ràng như route, hook, API layer, component và utility. Điều này giúp hệ thống dễ bảo trì, tạo điều kiện cho việc mở rộng chức năng trong tương lai.
+
+2. Tích hợp frontend với backend qua API
+----------------------------------------
+
+Một phần quan trọng trong dự án là sự tích hợp giữa frontend và backend thông qua API REST. Frontend không trực tiếp truy cập cơ sở dữ liệu hay xử lý logic nghiệp vụ, mà thay vào đó gửi các request HTTP tới backend thông qua một lớp API trung tâm. Trong dự án, tất cả các request đều đi qua tệp client chung, nơi thiết lập base URL và thêm token xác thực vào header Authorization nếu người dùng đã đăng nhập.
+
+Ví dụ, ứng dụng định nghĩa cấu hình Axios như sau: base URL của backend được đặt trên endpoint /api/v1, và mỗi request đều có thể có header Content-Type theo kiểu JSON hoặc multipart/form-data tùy theo trường hợp. Điều này giúp frontend dễ dàng tương tác với các module backend như authentication, folder, document, permission, sharing request và user management.
+
+3. Quy trình đăng ký và đăng nhập
+-----------------------------------
+
+Với tính năng đăng ký và đăng nhập, frontend triển khai form trên UI để người dùng nhập email, mật khẩu và tên đầy đủ. Khi người dùng nhấn nút đăng ký hoặc đăng nhập, frontend gửi request đến endpoint backend tương ứng:
+
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+
+Sau khi backend xác thực thông tin người dùng, server trả về JWT token cùng thông tin người dùng. Frontend lưu token vào localStorage và dùng nó cho các request tiếp theo. Việc này cho phép hệ thống nhận diện phiên làm việc của người dùng và kiểm soát quyền truy cập vào tài nguyên khác nhau.
+
+4. Quy trình truy cập tài nguyên bảo vệ bằng JWT
+--------------------------------------------------
+
+Đối với các chức năng cần xác thực như xem danh sách tài liệu, tạo thư mục, upload file, chia sẻ tài liệu, quản lý quyền hoặc quản trị người dùng, frontend sẽ đính kèm token trong header Authorization theo dạng Bearer <token>. Đây là một chuẩn phổ biến trong hệ thống bảo mật dựa trên JWT.
+
+Khi backend nhận yêu cầu, nó sẽ kiểm tra token, xác thực chữ ký và giải mã thông tin người dùng. Nếu token hợp lệ, backend cho phép request tiếp tục; nếu không hợp lệ hoặc hết hạn, backend trả về lỗi 401 Unauthorized. Đây là cơ chế giúp bảo vệ API và ngăn truy cập trái phép.
+
+5. Xử lý upload và quản lý tài liệu
+------------------------------------
+
+Với chức năng upload tài liệu, frontend tạo một FormData và bổ sung file được chọn bởi người dùng, cùng thông tin như folder_id, title. Sau đó, frontend gửi request POST tới endpoint /documents theo kiểu multipart/form-data. Đây là phương pháp phù hợp khi gửi file nhị phân cùng metadata đi kèm.
+
+Ở phía backend, file được nhận dưới dạng MultipartFile và xử lý để lưu thông tin như tên file gốc, loại MIME, kích thước, metadata và nội dung file. Đồng thời, ứng dụng sẽ tạo bản ghi quyền sở hữu cho người upload để người dùng đó có quyền Owner trên tài liệu vừa upload.
+
+Các thao tác khác như xem, sửa tên, di chuyển vào folder, xóa tài liệu hoặc tải xuống đều là các request riêng biệt lên backend. Frontend nhận dữ liệu và cập nhật giao diện dựa trên kết quả trả về, giúp người dùng tương tác một cách mượt mà.
+
+6. Quản lý thư mục, quyền và chia sẻ
+-------------------------------------
+
+Frontend còn tích hợp các API phục vụ cho quản lý thư mục, quyền truy cập và chia sẻ tài liệu. Cụ thể:
+
+- GET /api/v1/folders: lấy danh sách thư mục
+- POST /api/v1/folders: tạo thư mục mới
+- PATCH /api/v1/folders/:id: cập nhật tên thư mục
+- DELETE /api/v1/folders/:id: xóa thư mục
+
+Các quyền truy cập được quản lý thông qua bảng permissions và các API liên quan. Khi một người dùng được chia sẻ quyền xem hoặc chỉnh sửa tài liệu, frontend sẽ hiển thị các quyền này trong giao diện chi tiết tài liệu và cho phép admin hoặc chủ sở hữu cập nhật hoặc thu hồi quyền.
+
+7. Giao diện quản trị admin
+---------------------------
+
+Frontend cung cấp một giao diện admin để quản lý người dùng, thay đổi vai trò và xuất báo cáo hoạt động. Các request quản trị đi qua endpoints như:
+
+- GET /api/v1/users
+- PATCH /api/v1/users/:id/role
+- GET /api/v1/users/audit/export
+
+Đây cho thấy frontend không chỉ phục vụ người dùng thông thường mà còn hỗ trợ quản trị hệ thống theo mô hình role-based access control (RBAC). Tại đây, quyền admin được phân biệt rõ ràng với quyền user, giúp hệ thống dễ triển khai trên môi trường quản lý tài liệu tập thể.
+
+8. Kết luận
+------------
+
+Nhìn chung, kiến thức frontend cơ bản trong dự án này bao gồm việc sử dụng React, TypeScript, Vite, TanStack Router, TanStack Query, Tailwind CSS và Axios để xây dựng giao diện người dùng hiện đại. Quan trọng hơn, ứng dụng đã chứng minh khả năng tích hợp frontend với backend thông qua API REST, đặc biệt là trong các chức năng đăng ký, đăng nhập, upload, quản lý folder, quyền truy cập, chia sẻ tài liệu và quản trị hệ thống. Việc sử dụng JWT và các endpoint API hợp lý giúp hệ thống đảm bảo tính bảo mật, tính tương tác và khả năng mở rộng trong phát triển thực tế.
