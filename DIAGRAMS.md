@@ -26,7 +26,6 @@ flowchart LR
     NguoiDung --> UC14["DELETE /api/v1/documents/:id - Xóa tài liệu"]
 
     NguoiDung --> UC15["GET /api/v1/permissions - Xem quyền truy cập"]
-
     NguoiDung --> UC16["POST /api/v1/sharing-requests - Gửi yêu cầu chia sẻ"]
     NguoiDung --> UC17["GET /api/v1/sharing-requests - Xem yêu cầu chia sẻ"]
     NguoiDung --> UC18["POST /api/v1/sharing-requests/:id/approve - Duyệt yêu cầu"]
