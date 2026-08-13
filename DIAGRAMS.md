@@ -4,40 +4,41 @@
 
 ```mermaid
 flowchart LR
-    actor User
-    actor Admin
-    actor System
+    NguoiDung(["Người dùng"])
+    QuanTriVien(["Quản trị viên"])
+    HeThong(["Hệ thống"])
 
-    User --> UC1[POST /api/v1/auth/register]
-    User --> UC2[POST /api/v1/auth/login]
-    User --> UC3[GET /api/v1/auth/me]
-    User --> UC4[POST /api/v1/auth/logout]
-    User --> UC5[GET /api/v1/folders]
-    User --> UC6[POST /api/v1/folders]
-    User --> UC7[PATCH /api/v1/folders/:id]
-    User --> UC8[DELETE /api/v1/folders/:id]
-    User --> UC9[POST /api/v1/documents/upload]
-    User --> UC10[GET /api/v1/documents]
-    User --> UC11[GET /api/v1/documents/:id]
-    User --> UC12[PATCH /api/v1/documents/:id]
-    User --> UC13[POST /api/v1/documents/:id/move]
-    User --> UC14[DELETE /api/v1/documents/:id]
-    User --> UC15[GET /api/v1/permissions]
-    User --> UC16[POST /api/v1/sharing-requests]
-    User --> UC17[GET /api/v1/sharing-requests]
-    User --> UC18[PATCH /api/v1/sharing-requests/:id/approve]
-    User --> UC19[PATCH /api/v1/sharing-requests/:id/reject]
-    User --> UC20[GET /api/v1/users]
-    User --> UC21[PATCH /api/v1/users/:id/role]
-    User --> UC22[GET /api/v1/users/audit/export]
+    NguoiDung --> UC1["POST /api/v1/auth/register - Đăng ký tài khoản"]
+    NguoiDung --> UC2["POST /api/v1/auth/login - Đăng nhập"]
+    NguoiDung --> UC3["GET /api/v1/auth/me - Xem thông tin hiện tại"]
+    NguoiDung --> UC4["POST /api/v1/auth/logout - Đăng xuất"]
 
-    Admin --> UC23[Admin-only role enforcement]
-    Admin --> UC24[User governance and role changes]
-    Admin --> UC25[Audit log export]
+    NguoiDung --> UC5["GET /api/v1/folders - Xem danh sách thư mục"]
+    NguoiDung --> UC6["POST /api/v1/folders - Tạo thư mục"]
+    NguoiDung --> UC7["PATCH /api/v1/folders/:id - Cập nhật thư mục"]
+    NguoiDung --> UC8["DELETE /api/v1/folders/:id - Xóa thư mục"]
 
-    System --> UC26[JWT bearer validation]
-    System --> UC27[Permission checks on document access]
-    System --> UC28[Database persistence in PostgreSQL]
+    NguoiDung --> UC9["POST /api/v1/documents/upload - Tải tài liệu lên"]
+    NguoiDung --> UC10["GET /api/v1/documents - Xem danh sách tài liệu"]
+    NguoiDung --> UC11["GET /api/v1/documents/:id - Xem chi tiết tài liệu"]
+    NguoiDung --> UC12["PATCH /api/v1/documents/:id - Cập nhật tài liệu"]
+    NguoiDung --> UC13["POST /api/v1/documents/:id/move - Di chuyển tài liệu"]
+    NguoiDung --> UC14["DELETE /api/v1/documents/:id - Xóa tài liệu"]
+
+    NguoiDung --> UC15["GET /api/v1/permissions - Xem quyền truy cập"]
+    NguoiDung --> UC16["POST /api/v1/sharing-requests - Gửi yêu cầu chia sẻ"]
+    NguoiDung --> UC17["GET /api/v1/sharing-requests - Xem yêu cầu chia sẻ"]
+    NguoiDung --> UC18["POST /api/v1/sharing-requests/:id/approve - Duyệt yêu cầu"]
+    NguoiDung --> UC19["POST /api/v1/sharing-requests/:id/reject - Từ chối yêu cầu"]
+
+    QuanTriVien --> UC20["GET /api/v1/users - Quản lý người dùng"]
+    QuanTriVien --> UC21["PATCH /api/v1/users/:id/role - Thay đổi vai trò"]
+    QuanTriVien --> UC22["GET /api/v1/users/audit/export - Xuất nhật ký"]
+    QuanTriVien --> UC23["Thực thi quyền quản trị"]
+
+    HeThong --> UC24["Xác thực JWT Bearer"]
+    HeThong --> UC25["Kiểm tra quyền truy cập tài liệu"]
+    HeThong --> UC26["Lưu dữ liệu vào PostgreSQL"]
 ```
 
 ## 2) Sequence Diagram
@@ -118,9 +119,6 @@ classDiagram
         +login(request) ResponseEntity
         +getCurrentUser(authHeader) ResponseEntity
         +logout(authHeader) ResponseEntity
-        +forgotPassword(body) ResponseEntity
-        +resetPassword(body) ResponseEntity
-        -extractToken(authHeader) String
     }
 
     class AuthService {
@@ -131,7 +129,6 @@ classDiagram
         +login(request) AuthResponseDto
         +getCurrentUser(token) UserManager
         +logout(token) void
-        -toUserManager(user) UserManager
     }
 
     class JwtService {
@@ -141,8 +138,6 @@ classDiagram
         +extractUserId(token) Integer
         +extractRole(token) String
         +isTokenValid(token) boolean
-        -extractAllClaims(token) Claims
-        -getSigningKey() SecretKey
     }
 
     class FolderManagerController {
@@ -154,8 +149,6 @@ classDiagram
         +createFolder(folder, authorization) FolderManager
         +updateFolder(id, folder, authorization) FolderManager
         +deleteFolder(id, authorization) void
-        -extractToken(authHeader) String
-        -currentUserIdFromHeader(authorization) Integer
     }
 
     class FolderManagerService {
@@ -183,45 +176,10 @@ classDiagram
         -UserManagerRepository userManagerRepository
         +getAllPermissions() List~PermissionManager~
         +getPermissionsByDocumentId(docId) List~PermissionManager~
-        +getPermissionByDocumentAndUser(docId, userId) Optional~PermissionManager~
-        +getPermissions(docId, userId) List~PermissionManager~
         +getPermissionById(id) PermissionManager
         +createPermission(docId, userId, accessType) PermissionManager
         +updatePermission(id, accessType) PermissionManager
         +deletePermissionById(id) void
-        +toDto(permission) PermissionResponseDto
-        -normalizeAccessType(raw) String
-    }
-
-    class SharingRequestManagerController {
-        -SharingRequestManagerService sharingRequestManagerService
-        -JwtService jwtService
-        +getSharingRequests(authHeader, status, docId) List~SharingRequestResponseDto~
-        +getSharingRequestById(id) SharingRequestResponseDto
-        +createSharingRequest(authHeader, request) SharingRequestResponseDto
-        +approveSharingRequest(authHeader, id) SharingRequestResponseDto
-        +rejectSharingRequest(authHeader, id) SharingRequestResponseDto
-        +handleIllegalArgument(ex) ResponseEntity
-        -extractToken(authHeader) String
-    }
-
-    class SharingRequestManagerService {
-        -SharingRequestManagerRepository sharingRequestManagerRepository
-        -DocumentManageRepository documentManageRepository
-        -UserManagerRepository userManagerRepository
-        -PermissionManagerRepository permissionManagerRepository
-        +getAllSharingRequests() List~SharingRequestManager~
-        +getSharingRequestsByStatus(status) List~SharingRequestManager~
-        +getSharingRequestsByDocumentId(docId) List~SharingRequestManager~
-        +getSharingRequestsByStatusAndDocumentId(status, docId) List~SharingRequestManager~
-        +getIncomingRequests(actorUserId, status, docId) List~SharingRequestManager~
-        +getSharingRequestById(id) SharingRequestManager
-        +createSharingRequest(docId, recipientUserId, permission, actorUserId) SharingRequestManager
-        +approveSharingRequest(id, actorUserId) SharingRequestManager
-        +rejectSharingRequest(id, actorUserId) SharingRequestManager
-        +toDto(request) SharingRequestResponseDto
-        -normalizeStatus(raw) String
-        -normalizeAccessType(raw) String
     }
 
     class UserManagerController {
@@ -254,11 +212,6 @@ classDiagram
         +updateDocument(id, updatedDocument, currentUserId) DocumentManage
         +moveDocument(id, folderId, currentUserId) DocumentManage
         +deleteDocumentById(id, currentUserId) void
-        -resolveAccessType(doc, userId) String
-        -requireCanView(doc, userId) void
-        -requireCanEdit(doc, userId) void
-        -requireIsOwner(doc, userId) void
-        -isAdmin(user) boolean
     }
 
     class UserManager {
@@ -268,40 +221,26 @@ classDiagram
         +String password
         +String role
         +LocalDateTime createdAt
-        +List~DocumentManage~ documents
-        +List~FolderManager~ folders
-        +List~PermissionManager~ permissions
-        +List~SharingRequestManager~ sharingRequests
     }
 
     class FolderManager {
         +Integer folderId
         +String name
         +LocalDateTime createdAt
-        +UserManager owner
-        +List~DocumentManage~ documents
     }
 
     class DocumentManage {
         +Integer docId
         +String title
-        +Map metadata
         +LocalDateTime createdAt
         +LocalDateTime updatedAt
-        +byte[] fileData
         +String originalFilename
         +String contentType
-        +UserManager owner
-        +FolderManager folder
-        +List~PermissionManager~ permissions
-        +List~SharingRequestManager~ sharingRequests
     }
 
     class PermissionManager {
         +Integer permId
         +String accessType
-        +DocumentManage document
-        +UserManager user
     }
 
     class SharingRequestManager {
@@ -310,9 +249,6 @@ classDiagram
         +String status
         +LocalDateTime createdAt
         +LocalDateTime updatedAt
-        +DocumentManage document
-        +UserManager user
-        +UserManager sharingUser
     }
 
     AuthController --> AuthService
@@ -324,12 +260,7 @@ classDiagram
 
     PermissionManagerController --> PermissionManagerService
 
-    SharingRequestManagerController --> SharingRequestManagerService
-    SharingRequestManagerController --> JwtService
-
     UserManagerController --> UserManagerService
-
-    DocumentManageService --> DocumentManage
 
     AuthService --> UserManager
     AuthService --> JwtService
@@ -341,12 +272,8 @@ classDiagram
     PermissionManagerService --> DocumentManage
     PermissionManagerService --> UserManager
 
-    SharingRequestManagerService --> SharingRequestManager
-    SharingRequestManagerService --> DocumentManage
-    SharingRequestManagerService --> UserManager
-    SharingRequestManagerService --> PermissionManager
-
     UserManagerService --> UserManager
+    DocumentManageService --> DocumentManage
 
     UserManager "1" --> "0..*" DocumentManage
     UserManager "1" --> "0..*" FolderManager
