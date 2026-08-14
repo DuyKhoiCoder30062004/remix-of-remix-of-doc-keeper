@@ -29,22 +29,72 @@ B. Thiết kế quan hệ
 
 C. Chuẩn hóa cột dữ liệu chính
 - User:
-  id, full_name, email, password_hash, role, created_at, updated_at.
+  user_id, name, email, password, role, created_at.
 - Folder:
-  id, name, owner_id, parent_id, created_at, updated_at.
+  folder_id, name, owner_id, created_at.
 - Document:
-  id, name, mime_type, size, storage_path, owner_id, folder_id, created_at, updated_at.
+  doc_id, title, owner_id, metadata, created_at, updated_at, folder_id, file_data, original_filename, content_type.
 - Permission:
-  id, document_id, recipient_id, level, granted_by, granted_at.
+  perm_id, doc_id, user_id, access_type.
 - SharingRequest:
-  id, document_id, requester_id, target_user_id, requested_level, status, created_at, decided_at.
+  request_id, doc_id, requester_id, status, requested_at, permission.
+
+C1. Chi tiết data type đề xuất (PostgreSQL)
+
+Schema dưới đây đã được đối chiếu theo dữ liệu thực tế từ lệnh \d trong psql.
+
+- Bảng User
+  - user_id: INTEGER, PRIMARY KEY, DEFAULT nextval('users_user_id_seq').
+  - name: VARCHAR(100), NOT NULL.
+  - email: VARCHAR(255), NOT NULL, UNIQUE.
+  - password: VARCHAR(255), NOT NULL.
+  - role: VARCHAR(20), NOT NULL, CHECK role IN ('User', 'Admin').
+  - created_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+
+- Bảng Folder
+  - folder_id: INTEGER, PRIMARY KEY, DEFAULT nextval('folders_folder_id_seq').
+  - name: VARCHAR(255), NOT NULL.
+  - owner_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - created_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+
+- Bảng Document
+  - doc_id: INTEGER, PRIMARY KEY, DEFAULT nextval('documents_doc_id_seq').
+  - title: VARCHAR(255), NOT NULL.
+  - owner_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - metadata: JSONB, NULL.
+  - created_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+  - updated_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+  - folder_id: INTEGER, NULL, FOREIGN KEY -> folders(folder_id) ON DELETE SET NULL.
+  - file_data: BYTEA, NULL.
+  - original_filename: VARCHAR(255), NULL.
+  - content_type: VARCHAR(255), NULL.
+
+- Bảng Permission
+  - perm_id: INTEGER, PRIMARY KEY, DEFAULT nextval('permissions_perm_id_seq').
+  - doc_id: INTEGER, NULL, FOREIGN KEY -> documents(doc_id) ON DELETE CASCADE.
+  - user_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - access_type: VARCHAR(20), NOT NULL, CHECK access_type IN ('Owner', 'Editor', 'Viewer').
+
+- Bảng SharingRequest
+  - request_id: INTEGER, PRIMARY KEY, DEFAULT nextval('sharing_requests_request_id_seq').
+  - doc_id: INTEGER, NULL, FOREIGN KEY -> documents(doc_id) ON DELETE CASCADE.
+  - requester_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - status: VARCHAR(20), DEFAULT 'Pending', CHECK status IN ('Pending', 'Approved', 'Rejected').
+  - requested_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+  - permission: VARCHAR(20), NOT NULL.
 
 D. Ràng buộc cần có
 - Unique(email) cho User.
-- Unique(document_id, recipient_id) cho Permission.
-- Check/status enum cho SharingRequest (PENDING, APPROVED, REJECTED).
+- Check access_type cho Permission (Owner, Editor, Viewer).
+- Check/status enum cho SharingRequest (Pending, Approved, Rejected).
 - Foreign key đầy đủ và index cho cột truy vấn thường xuyên:
-  owner_id, folder_id, document_id, recipient_id, status.
+  owner_id, folder_id, doc_id, user_id, requester_id, status.
+
+D1. Các điểm còn thiếu hoặc nên cải thiện trong schema hiện tại
+- Chưa có UNIQUE(doc_id, user_id) trong bảng permissions, có thể gây trùng quyền cho cùng một user trên cùng một tài liệu.
+- Các cột owner_id, doc_id, user_id, requester_id đang cho phép NULL; nếu nghiệp vụ không cho phép bản ghi mồ côi, nên thêm NOT NULL.
+- Bảng users hiện không có updated_at; nếu cần audit thay đổi hồ sơ người dùng, nên bổ sung cột này.
+- Bảng sharing_requests chưa thể hiện rõ người nhận yêu cầu (target_user_id); nếu luồng chia sẻ cần người nhận cụ thể, nên bổ sung cột target_user_id.
 
 E. Hướng triển khai với Spring Boot
 - Dùng JPA Entity cho từng bảng.
@@ -378,12 +428,60 @@ Cơ sở dữ liệu của hệ thống được thiết kế theo mô hình qua
 
 Thực thể User lưu thông tin tài khoản người dùng như họ tên, email, mật khẩu đã mã hóa và vai trò hệ thống. Thực thể Folder dùng để tổ chức tài liệu theo cấu trúc thư mục và liên kết với người sở hữu. Thực thể Document lưu metadata của tài liệu như tên, loại tệp, kích thước, đường dẫn lưu trữ, chủ sở hữu và thư mục chứa tài liệu. Thực thể Permission lưu quyền truy cập mà một người dùng được cấp đối với một tài liệu cụ thể. Thực thể SharingRequest lưu các yêu cầu chia sẻ tài liệu và trạng thái xử lý của từng yêu cầu.
 
+Đối chiếu schema PostgreSQL thực tế cho thấy hệ thống hiện dùng các cột sau: users(user_id, name, email, password, role, created_at), folders(folder_id, name, owner_id, created_at), documents(doc_id, title, owner_id, metadata, created_at, updated_at, folder_id, file_data, original_filename, content_type), permissions(perm_id, doc_id, user_id, access_type), sharing_requests(request_id, doc_id, requester_id, status, requested_at, permission).
+
 Các quan hệ trong hệ thống được xác định như sau:
 - Một User có thể sở hữu nhiều Folder và nhiều Document.
 - Một Folder có thể chứa nhiều Document.
 - Một Document có thể được gán nhiều Permission.
 - Một Document có thể phát sinh nhiều SharingRequest.
 - Một User có thể là người gửi hoặc người nhận yêu cầu chia sẻ.
+
+Chi tiết kiểu dữ liệu đề xuất cho từng bảng (PostgreSQL) như sau:
+
+- Bảng User
+  - user_id: INTEGER, PRIMARY KEY, DEFAULT nextval('users_user_id_seq').
+  - name: VARCHAR(100), NOT NULL.
+  - email: VARCHAR(150), NOT NULL, UNIQUE.
+  - password: VARCHAR(255), NOT NULL.
+  - role: VARCHAR(20), NOT NULL, CHECK role IN ('User', 'Admin').
+  - created_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+
+- Bảng Folder
+  - folder_id: INTEGER, PRIMARY KEY, DEFAULT nextval('folders_folder_id_seq').
+  - name: VARCHAR(100), NOT NULL.
+  - owner_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - created_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+
+- Bảng Document
+  - doc_id: INTEGER, PRIMARY KEY, DEFAULT nextval('documents_doc_id_seq').
+  - title: VARCHAR(255), NOT NULL.
+  - owner_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - metadata: JSONB, NULL.
+  - created_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+  - updated_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+  - folder_id: INTEGER, NULL, FOREIGN KEY -> folders(folder_id) ON DELETE SET NULL.
+  - file_data: BYTEA, NULL.
+  - original_filename: VARCHAR(255), NULL.
+  - content_type: VARCHAR(255), NULL.
+
+- Bảng Permission
+  - perm_id: INTEGER, PRIMARY KEY, DEFAULT nextval('permissions_perm_id_seq').
+  - doc_id: INTEGER, NULL, FOREIGN KEY -> documents(doc_id) ON DELETE CASCADE.
+  - user_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - access_type: VARCHAR(20), NOT NULL, CHECK access_type IN ('Owner', 'Editor', 'Viewer').
+
+- Bảng SharingRequest
+  - request_id: INTEGER, PRIMARY KEY, DEFAULT nextval('sharing_requests_request_id_seq').
+  - doc_id: INTEGER, NULL, FOREIGN KEY -> documents(doc_id) ON DELETE CASCADE.
+  - requester_id: INTEGER, NULL, FOREIGN KEY -> users(user_id) ON DELETE CASCADE.
+  - status: VARCHAR(20), DEFAULT 'Pending', CHECK status IN ('Pending', 'Approved', 'Rejected').
+  - requested_at: TIMESTAMP WITHOUT TIME ZONE, DEFAULT CURRENT_TIMESTAMP.
+  - permission: VARCHAR(20), NOT NULL.
+
+Ghi chú đối chiếu thực tế:
+- Schema hiện tại chưa có cột target_user_id trong sharing_requests.
+- Schema hiện tại chưa có UNIQUE(doc_id, user_id) trong permissions.
 
 Để tăng tính toàn vẹn dữ liệu, hệ thống áp dụng các ràng buộc như unique cho email người dùng, unique cho cặp document_id - recipient_id trong Permission, cùng với các khóa ngoại giữa Document, Folder và User. Ngoài ra, các trường truy vấn thường xuyên như owner_id, folder_id, document_id, recipient_id và status được lập chỉ mục để tối ưu hiệu năng.
 
