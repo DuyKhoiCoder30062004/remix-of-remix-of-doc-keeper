@@ -1,0 +1,311 @@
+HƯỚNG DẪN CHỤP HÌNH ERD ĐỂ ĐƯA VÀO BÁO CÁO
+==========================================
+
+Mục tiêu
+--------
+File này là một tutorial thực hành, giúp bạn chụp và đưa sơ đồ ERD vào báo cáo theo cách:
+- Dễ đọc
+- Đúng logic nghiệp vụ
+- Không bị quá dài hoặc quá nhỏ
+- Có thể đối chiếu trực tiếp với phần phân tích hệ thống
+- Dễ giải thích khi giảng viên hỏi
+
+
+1. Tư duy đúng trước khi chụp ERD
+---------------------------------
+Sai lầm phổ biến nhất là chụp toàn bộ ERD trong một ảnh duy nhất rồi chèn thẳng vào báo cáo. Cách này thường gây ra các vấn đề sau:
+- Chữ rất nhỏ, gần như không đọc được
+- Đường nối giữa các bảng chồng chéo, khó theo dõi
+- Người đọc không hiểu đâu là phần quan trọng
+- Hình chiếm nhiều trang nhưng giá trị trình bày thấp
+
+Vì vậy, cách làm đúng là:
+- Giữ một hình ERD tổng thể để giới thiệu chung
+- Tách thêm nhiều hình nhỏ theo từng cụm nghiệp vụ
+- Mỗi cụm chỉ gồm các bảng có liên kết chặt chẽ bằng khóa ngoại hoặc cùng phục vụ một luồng chức năng
+
+
+2. Có nên chụp theo các bảng có foreign key với nhau không?
+------------------------------------------------------------
+Có. Đây là cách nên làm nhất.
+
+Bạn nên nhóm các bảng theo quan hệ khóa ngoại vì:
+- Khóa ngoại thể hiện mối quan hệ dữ liệu thật sự
+- Các bảng liên kết với nhau thường cũng liên kết về mặt nghiệp vụ
+- Hình chụp sẽ có ý nghĩa hơn là chụp từng bảng rời rạc
+- Người đọc dễ hiểu vì sao các bảng được đặt cùng một hình
+
+Kết luận ngắn gọn:
+Không nên chụp ngẫu nhiên từng bảng riêng lẻ. Nên chụp theo nhóm bảng có quan hệ FK với nhau và cùng thuộc một module nghiệp vụ.
+
+
+3. Cách chia ERD thành các cụm để chụp
+--------------------------------------
+Với hệ thống quản lý tài liệu của bạn, nên chia ERD thành các cụm như sau:
+
+3.1 Cụm người dùng và xác thực
+
+Các bảng nên đưa vào:
+- User
+- Role hoặc trường role trong User
+- Các bảng liên quan đến xác thực nếu hệ thống có
+
+Mục đích của cụm này:
+- Thể hiện User là thực thể trung tâm của hệ thống
+- Giải thích vai trò User/Admin
+- Làm rõ cơ chế xác thực và danh tính người dùng
+
+Tên hình gợi ý:
+- Hình X.Y. Cụm thực thể người dùng và xác thực
+
+
+3.2 Cụm thư mục và tài liệu
+  
+Các bảng nên đưa vào:
+- Folder
+- Document
+- User
+
+Mục đích của cụm này:
+- Thể hiện một user sở hữu nhiều thư mục và nhiều tài liệu
+- Thể hiện tài liệu nằm trong thư mục nào
+- Thể hiện owner của tài liệu là ai
+
+Tên hình gợi ý:
+- Hình X.Y. Cụm thực thể thư mục và tài liệu
+
+
+3.3 Cụm chia sẻ và phân quyền
+
+Các bảng nên đưa vào:
+- Document
+- Permission
+- SharingRequest
+- User
+
+Mục đích của cụm này:
+- Thể hiện tài liệu được chia sẻ cho người dùng khác như thế nào
+- Thể hiện luồng xin quyền truy cập
+- Thể hiện quan hệ giữa Permission và SharingRequest
+
+Tên hình gợi ý:
+- Hình X.Y. Cụm thực thể chia sẻ và phân quyền tài liệu
+
+
+3.4 Cụm tổng thể
+
+Nội dung:
+- Chụp toàn cảnh ERD nếu cần
+
+Mục đích:
+- Cho người đọc thấy bức tranh tổng quan của toàn bộ hệ thống
+- Dùng để giới thiệu chung, không dùng để phân tích chi tiết
+
+Tên hình gợi ý:
+- Hình X.Y. Sơ đồ ERD tổng thể của hệ thống
+
+
+4. Quy trình chụp hình từng bước
+--------------------------------
+Đây là quy trình thực hành bạn có thể làm theo từng bước.
+
+Bước 1: Mở sơ đồ ERD gốc
+- Mở công cụ thiết kế ERD bạn đang dùng
+- Kiểm tra lại toàn bộ bảng và đường nối
+- Đảm bảo quan hệ PK/FK đã hiển thị đúng
+
+Bước 2: Xác định bảng trung tâm
+- Với hệ thống của bạn, hai bảng trung tâm thường là:
+  - User
+  - Document
+- Đây là hai bảng liên kết đến nhiều chức năng khác, nên nên đặt chúng ở vị trí dễ nhìn nhất
+
+Bước 3: Gom nhóm các bảng theo nghiệp vụ
+- Kéo các bảng có liên quan về gần nhau
+- Nhóm theo từng cụm đã nêu ở Mục 3
+- Giảm số lượng đường nối giao cắt nhau
+
+Bước 4: Tinh gọn nội dung trước khi chụp
+- Nếu một bảng có quá nhiều cột, chỉ giữ lại các cột quan trọng
+- Ưu tiên hiển thị:
+  - PK
+  - FK
+  - Các thuộc tính nghiệp vụ chính
+- Ẩn các cột phụ nếu chúng làm hình bị rối
+
+Bước 5: Phóng to vừa đủ
+- Zoom đến mức người đọc có thể nhìn rõ tên bảng và cột
+- Tránh zoom quá xa vì chữ sẽ mờ nhỏ
+- Tránh zoom quá gần vì hình sẽ bị cắt mất quan hệ
+
+Bước 6: Chụp hình tổng thể
+- Chụp một ảnh toàn cảnh ERD
+- Ảnh này dùng để đặt ở phần giới thiệu sơ đồ hoặc phụ lục
+
+Bước 7: Chụp từng cụm chi tiết
+- Chụp riêng từng cụm nghiệp vụ
+- Mỗi ảnh chỉ nên tập trung vào một logic nhất định
+- Nếu một cụm vẫn quá lớn, tiếp tục tách nhỏ thêm
+
+Bước 8: Đặt tên file ảnh có hệ thống
+- Ví dụ:
+  - erd-overview.png
+  - erd-user-auth.png
+  - erd-folder-document.png
+  - erd-sharing-permission.png
+
+Bước 9: Chèn vào báo cáo
+- Trong thân báo cáo, dùng ảnh cụm nhỏ để phân tích
+- Ảnh tổng thể nên đặt ở đầu phần ERD hoặc ở phụ lục
+
+
+5. Trong mỗi ảnh nên hiển thị những gì?
+---------------------------------------
+Mỗi hình ERD nên thể hiện được tối thiểu các thành phần sau:
+- Tên bảng
+- Khóa chính (PK)
+- Khóa ngoại (FK)
+- Một số thuộc tính quan trọng
+- Đường nối quan hệ giữa các bảng
+
+Không bắt buộc phải hiển thị tất cả cột nếu điều đó làm hình rối. Trong báo cáo, sự rõ ràng quan trọng hơn sự đầy đủ tuyệt đối.
+
+
+6. Cách bố trí bảng trước khi chụp
+----------------------------------
+Trước khi chụp, hãy sắp xếp bảng như sau:
+- Đặt bảng trung tâm ở giữa
+- Đặt bảng phụ ở xung quanh
+- Kéo các bảng có FK trực tiếp sát nhau
+- Cố gắng để đường nối càng ngắn càng tốt
+- Hạn chế đường chéo và đường cắt chồng lên nhau
+
+Ví dụ với hệ thống của bạn:
+- User nên đặt gần Document
+- Folder nên đặt gần Document
+- Permission và SharingRequest nên đặt gần Document và User
+
+Lý do:
+- User và Document là hai điểm giao chính của nhiều luồng nghiệp vụ
+- Khi đặt đúng vị trí, hình sẽ dễ đọc và đẹp hơn hẳn
+
+
+7. Khi nào nên chụp một bảng riêng lẻ?
+--------------------------------------
+Chỉ nên chụp một bảng riêng khi:
+- Bảng đó rất quan trọng
+- Bảng đó có nhiều thuộc tính cần phân tích riêng
+- Bạn muốn giải thích kỹ cấu trúc dữ liệu của một bảng cụ thể
+
+Ví dụ phù hợp:
+- Document
+- Permission
+- SharingRequest
+
+Tuy nhiên, trong hầu hết trường hợp, vẫn nên đặt bảng đó cùng các bảng liên kết để người đọc hiểu được ý nghĩa của nó trong hệ thống.
+
+
+8. Cách viết mô tả dưới mỗi hình
+--------------------------------
+Sau mỗi hình, bạn nên có 1 đoạn mô tả ngắn gồm 3 đến 5 dòng, trả lời các câu hỏi sau:
+- Hình này mô tả cụm nào?
+- Bảng trung tâm là bảng nào?
+- Quan hệ khóa ngoại chính là gì?
+- Cụm này phục vụ chức năng gì trong hệ thống?
+
+Mẫu mô tả 1:
+"Hình này mô tả cụm thực thể thư mục và tài liệu. Trong đó, bảng Document lưu thông tin tài liệu và liên kết với bảng Folder thông qua khóa ngoại folder_id. Mỗi tài liệu đồng thời gắn với một chủ sở hữu thông qua owner_id, qua đó thể hiện được cấu trúc tổ chức và quản lý tài liệu trong hệ thống."
+
+Mẫu mô tả 2:
+"Hình này mô tả cụm chia sẻ và phân quyền tài liệu. Bảng Permission thể hiện quyền truy cập được cấp cho người dùng đối với một tài liệu cụ thể, trong khi SharingRequest lưu thông tin về các yêu cầu chia sẻ và trạng thái xử lý của từng yêu cầu."
+
+
+9. Nếu sơ đồ quá dài theo chiều dọc thì xử lý thế nào?
+------------------------------------------------------
+Nếu sơ đồ dài như hình bạn đã gửi, không nên cố nhét nguyên ảnh vào một trang. Hãy xử lý như sau:
+
+Cách 1: Chia thành 2 đến 4 hình nhỏ theo module
+- Đây là cách tốt nhất cho thân báo cáo
+
+Cách 2: Đưa bản đầy đủ vào phụ lục
+- Phù hợp khi bạn vẫn muốn có bản tổng thể để đối chiếu
+
+Cách 3: Dùng một bản rút gọn ở thân báo cáo
+- Chỉ giữ những bảng quan trọng nhất
+- Bản đầy đủ để ở phần phụ lục
+
+Khuyến nghị tốt nhất:
+- Thân báo cáo: 1 hình tổng quan + 2 hoặc 3 hình cụm chính
+- Phụ lục: 1 hình ERD đầy đủ, độ phân giải cao
+
+
+10. Cách đặt tên hình trong báo cáo
+-----------------------------------
+Bạn có thể đặt tên theo dạng sau:
+- Hình 2.15. Sơ đồ ERD tổng thể của hệ thống
+- Hình 2.16. Cụm thực thể người dùng và xác thực
+- Hình 2.17. Cụm thực thể thư mục và tài liệu
+- Hình 2.18. Cụm thực thể chia sẻ và phân quyền tài liệu
+
+Nguyên tắc đặt tên:
+- Ngắn gọn
+- Nêu rõ nội dung cụm
+- Phù hợp với số thứ tự hình trong chương
+
+
+11. Cách dẫn hình vào trong báo cáo
+-----------------------------------
+Bạn có thể dùng đoạn mẫu sau:
+
+"Do sơ đồ ERD tổng thể của hệ thống có kích thước lớn và bao gồm nhiều thực thể, nhóm trình bày một hình tổng quan trong thân báo cáo và tách các cụm thực thể chính thành các hình chi tiết để dễ quan sát. Bản đầy đủ của ERD được đưa vào phụ lục để phục vụ đối chiếu khi cần thiết."
+
+Nếu muốn viết ngắn hơn:
+
+"Hình ERD đầy đủ được trình bày tại phụ lục, trong khi phần nội dung chính chỉ tập trung vào các cụm thực thể quan trọng để bảo đảm khả năng đọc và phân tích."
+
+
+12. Cấu trúc khuyến nghị để bạn áp dụng ngay
+--------------------------------------------
+Nếu bạn cần làm ngay cho báo cáo của mình, hãy đi theo đúng cấu trúc này:
+
+1. Một hình ERD tổng thể
+	- Dùng để giới thiệu chung
+
+2. Một hình cụm User + Authentication
+	- Dùng để mô tả người dùng và phân quyền cơ bản
+
+3. Một hình cụm Folder + Document + User
+	- Dùng để mô tả lưu trữ và tổ chức tài liệu
+
+4. Một hình cụm Document + Permission + SharingRequest + User
+	- Dùng để mô tả chia sẻ và kiểm soát truy cập
+
+5. Nếu cần, thêm một hình riêng cho phần Admin/User governance
+	- Dùng khi hệ thống có phần quản trị đủ lớn để tách riêng
+
+
+13. Checklist trước khi chèn hình vào báo cáo
+---------------------------------------------
+Trước khi nộp báo cáo, kiểm tra nhanh các điểm sau:
+- Chữ trong hình có đọc được không?
+- Tên bảng có rõ không?
+- PK và FK có nhìn thấy không?
+- Đường nối có bị chồng chéo quá nhiều không?
+- Hình đã có caption chưa?
+- Mỗi hình đã có đoạn mô tả bên dưới chưa?
+- Bản đầy đủ của ERD đã được đưa vào phụ lục chưa nếu sơ đồ quá lớn?
+
+
+14. Kết luận thực hành
+----------------------
+Tóm lại, với ERD scheme design của bạn:
+- Nên chụp theo cụm bảng có khóa ngoại liên kết với nhau
+- Nên nhóm theo nghiệp vụ, không nhóm tùy ý
+- Nên có 1 hình tổng quan và nhiều hình chi tiết
+- Nên đưa bản đầy đủ vào phụ lục nếu hình quá lớn
+
+Làm theo cách này, báo cáo sẽ:
+- Rõ hơn
+- Dễ đọc hơn
+- Dễ giải thích hơn khi bảo vệ
+- Có chất lượng trình bày tốt hơn nhiều so với việc chèn một hình quá dài và khó nhìn

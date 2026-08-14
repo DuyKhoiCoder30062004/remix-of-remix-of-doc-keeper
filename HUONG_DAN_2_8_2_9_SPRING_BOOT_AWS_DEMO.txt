@@ -1,0 +1,501 @@
+HƯỚNG DẪN CHI TIẾT 2.8 - 2.9
+============================
+
+Tài liệu này được viết theo dạng tutorial để bạn có thể vừa đưa vào báo cáo, vừa dùng làm checklist triển khai thực tế.
+
+
+## 2.8. PHÁT TRIỂN DỰ ÁN VỚI SPRING BOOT
+
+### 2.8.1 Thiết kế Database cho ứng dụng
+
+Mục tiêu:
+- Xây dựng mô hình dữ liệu nhất quán với nghiệp vụ quản lý tài liệu.
+- Bảo đảm dữ liệu an toàn, dễ mở rộng, và dễ truy vấn.
+
+A. Xác định thực thể cốt lõi
+- User: lưu thông tin tài khoản và vai trò.
+- Folder: tổ chức tài liệu theo thư mục.
+- Document: lưu metadata tài liệu.
+- Permission: lưu quyền truy cập tài liệu theo người dùng.
+- SharingRequest: lưu yêu cầu xin quyền truy cập.
+
+B. Thiết kế quan hệ
+- User 1 - N Document (owner_id).
+- User 1 - N Folder (owner_id).
+- Folder 1 - N Document (folder_id).
+- Document 1 - N Permission.
+- User 1 - N Permission (recipient_id).
+- Document 1 - N SharingRequest.
+
+C. Chuẩn hóa cột dữ liệu chính
+- User:
+  id, full_name, email, password_hash, role, created_at, updated_at.
+- Folder:
+  id, name, owner_id, parent_id, created_at, updated_at.
+- Document:
+  id, name, mime_type, size, storage_path, owner_id, folder_id, created_at, updated_at.
+- Permission:
+  id, document_id, recipient_id, level, granted_by, granted_at.
+- SharingRequest:
+  id, document_id, requester_id, target_user_id, requested_level, status, created_at, decided_at.
+
+D. Ràng buộc cần có
+- Unique(email) cho User.
+- Unique(document_id, recipient_id) cho Permission.
+- Check/status enum cho SharingRequest (PENDING, APPROVED, REJECTED).
+- Foreign key đầy đủ và index cho cột truy vấn thường xuyên:
+  owner_id, folder_id, document_id, recipient_id, status.
+
+E. Hướng triển khai với Spring Boot
+- Dùng JPA Entity cho từng bảng.
+- Dùng migration tool (Flyway hoặc Liquibase) để version hóa schema.
+- Không sửa schema thủ công trực tiếp trên production.
+
+F. Đoạn viết mẫu cho báo cáo
+"Cơ sở dữ liệu được thiết kế theo mô hình quan hệ, xoay quanh các thực thể User, Folder, Document, Permission và SharingRequest. Mô hình này bảo đảm khả năng quản lý tài liệu theo chủ sở hữu, kiểm soát truy cập theo mức quyền, và xử lý luồng chia sẻ qua cơ chế yêu cầu duyệt. Các ràng buộc khóa ngoại, unique key và chỉ mục truy vấn được áp dụng để tăng tính toàn vẹn và hiệu năng hệ thống."
+
+
+### 2.8.2 Xây dựng chức năng CRUD
+
+Mục tiêu:
+- Triển khai đầy đủ Create, Read, Update, Delete cho module chính.
+
+A. Chiến lược triển khai theo tầng
+- Controller: nhận request/response.
+- Service: xử lý nghiệp vụ.
+- Repository: truy cập dữ liệu.
+- DTO/Mapper: tách biệt dữ liệu API và dữ liệu persistence.
+
+B. CRUD theo module
+
+1) Folder CRUD
+- Create: tạo thư mục mới theo owner hiện tại.
+- Read: lấy danh sách thư mục theo owner.
+- Update: đổi tên thư mục.
+- Delete: xóa thư mục (kiểm tra ràng buộc tài liệu con).
+
+2) Document CRUD
+- Create: upload tài liệu, lưu file storage + metadata DB.
+- Read: danh sách tài liệu theo quyền truy cập.
+- Update: đổi tên, đổi thư mục, cập nhật metadata.
+- Delete: xóa metadata và file vật lý (nếu dùng S3/local storage).
+
+3) SharingRequest CRUD (theo nghiệp vụ)
+- Create: gửi yêu cầu chia sẻ.
+- Read: xem danh sách yêu cầu gửi/nhận.
+- Update: duyệt/từ chối yêu cầu.
+- Delete: thường không xóa cứng, nên dùng cập nhật trạng thái.
+
+C. Quy tắc nghiệp vụ quan trọng
+- Người dùng chỉ sửa/xóa tài liệu khi có quyền phù hợp.
+- Tất cả API nhạy cảm phải xác thực JWT.
+- Kiểm tra quyền trước khi trả dữ liệu chi tiết tài liệu.
+
+D. Xử lý lỗi chuẩn
+- 400: dữ liệu đầu vào không hợp lệ.
+- 401: thiếu token hoặc token sai.
+- 403: không đủ quyền.
+- 404: không tìm thấy tài nguyên.
+- 409: xung đột dữ liệu (ví dụ unique key).
+
+E. Đoạn viết mẫu cho báo cáo
+"Các chức năng CRUD được triển khai theo kiến trúc nhiều tầng (Controller - Service - Repository) nhằm tách biệt trách nhiệm và tăng khả năng bảo trì. Mỗi thao tác đều được kiểm soát bởi điều kiện xác thực và phân quyền, giúp bảo đảm tính an toàn khi xử lý dữ liệu tài liệu và luồng chia sẻ trong hệ thống."
+
+
+### 2.8.3 Tạo và quản lý API Endpoints
+
+Mục tiêu:
+- Chuẩn hóa API REST, dễ tích hợp frontend và dễ kiểm thử.
+
+A. Nguyên tắc đặt endpoint
+- Dùng version: /api/v1/...
+- Dùng danh từ số nhiều: /users, /documents, /folders
+- Method đúng chuẩn:
+  GET đọc, POST tạo, PATCH cập nhật một phần, DELETE xóa.
+
+B. Nhóm endpoint điển hình
+
+1) Authentication
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+- GET /api/v1/auth/me
+- POST /api/v1/auth/logout
+
+2) Folder
+- GET /api/v1/folders
+- POST /api/v1/folders
+- PATCH /api/v1/folders/:id
+- DELETE /api/v1/folders/:id
+
+3) Document
+- POST /api/v1/documents/upload
+- GET /api/v1/documents
+- GET /api/v1/documents/:id
+- PATCH /api/v1/documents/:id
+- POST /api/v1/documents/:id/move
+- DELETE /api/v1/documents/:id
+
+4) Permission và Sharing
+- GET /api/v1/permissions
+- POST /api/v1/sharing-requests
+- GET /api/v1/sharing-requests
+- POST /api/v1/sharing-requests/:id/approve
+- POST /api/v1/sharing-requests/:id/reject
+
+5) Admin
+- GET /api/v1/users
+- PATCH /api/v1/users/:id/role
+- GET /api/v1/users/audit/export
+
+C. Chuẩn response API
+- Thành công:
+  code, message, data, timestamp.
+- Thất bại:
+  code, message, error_details, timestamp, path.
+
+D. Tài liệu hóa API
+- Dùng Swagger/OpenAPI để:
+  - mô tả request body,
+  - response schema,
+  - auth requirement,
+  - ví dụ gọi API.
+
+E. Đoạn viết mẫu cho báo cáo
+"Hệ thống API được tổ chức theo chuẩn RESTful với tiền tố phiên bản /api/v1. Endpoints được phân nhóm theo module nghiệp vụ (Authentication, Folder, Document, Sharing, Admin), kết hợp chuẩn phản hồi thống nhất và tài liệu hóa qua OpenAPI nhằm hỗ trợ tích hợp và kiểm thử hiệu quả."
+
+
+### 2.8.4 Kiểm thử API bằng Postman
+
+Mục tiêu:
+- Xác minh endpoint hoạt động đúng về nghiệp vụ, bảo mật và xử lý lỗi.
+
+A. Chuẩn bị môi trường Postman
+- Tạo Environment: local, staging, production.
+- Biến môi trường cơ bản:
+  base_url, access_token, test_user_id, test_document_id.
+
+B. Quy trình test khuyến nghị
+
+Bước 1: Test Auth
+- Register user mới.
+- Login lấy token.
+- Lưu token vào biến access_token.
+- Gọi /auth/me xác minh token hợp lệ.
+
+Bước 2: Test Folder CRUD
+- Tạo folder.
+- Lấy danh sách folder.
+- Đổi tên folder.
+- Xóa folder.
+
+Bước 3: Test Document CRUD
+- Upload file.
+- Xem list.
+- Xem chi tiết.
+- Update metadata.
+- Move document.
+- Delete document.
+
+Bước 4: Test Sharing flow
+- User A gửi sharing request cho User B.
+- User B approve/reject.
+- Kiểm tra Permission đã cập nhật chưa.
+
+Bước 5: Test quyền truy cập
+- User không quyền gọi update/delete document phải trả 403.
+- Thiếu token phải trả 401.
+
+C. Viết test script trong Postman
+- Kiểm tra status code.
+- Kiểm tra response body field bắt buộc.
+- Lưu id trả về cho request tiếp theo.
+
+D. Báo cáo kết quả test
+- Bảng tổng hợp:
+  endpoint, expected, actual, pass/fail, ghi chú lỗi.
+
+E. Đoạn viết mẫu cho báo cáo
+"Kiểm thử API được thực hiện bằng Postman theo chuỗi nghiệp vụ hoàn chỉnh từ xác thực, quản lý thư mục/tài liệu đến chia sẻ và phân quyền. Kết quả kiểm thử xác nhận các endpoint chính hoạt động đúng chức năng, đồng thời bảo đảm các kiểm tra bảo mật và xử lý lỗi theo thiết kế."
+
+
+## 2.9. HOÀN THÀNH VÀ DEMO DỰ ÁN
+
+### 2.9.1 Triển khai ứng dụng lên AWS
+
+Mục tiêu:
+- Đưa hệ thống vào môi trường chạy thật để kiểm thử tích hợp và demo.
+
+A. Kiến trúc triển khai đề xuất
+- Frontend: deploy static trên Amazon S3.
+- Backend Spring Boot: chạy trên EC2.
+- Cơ sở dữ liệu: Amazon RDS PostgreSQL.
+
+
+1) EC2 AWS
+
+Các bước thực hiện:
+1. Tạo EC2 instance (Ubuntu/Amazon Linux).
+2. Cấu hình Security Group:
+   - Mở cổng SSH 22 (giới hạn IP quản trị).
+   - Mở cổng ứng dụng backend (ví dụ 8080).
+3. Cài Java runtime (JDK 17+), Git, Nginx (nếu reverse proxy).
+4. Build backend thành file jar.
+5. Upload jar lên EC2 và chạy:
+   java -jar app.jar
+6. Cấu hình systemd service để tự khởi động lại khi máy reboot.
+7. (Khuyến nghị) đặt Nginx reverse proxy + domain + HTTPS.
+
+Checklist EC2:
+- API truy cập được từ internet theo domain/IP.
+- Health check endpoint trả về bình thường.
+- Log backend ghi nhận request ổn định.
+
+
+2) RDS (Relational Database Service)
+
+Các bước thực hiện:
+1. Tạo PostgreSQL instance trên RDS.
+2. Thiết lập username/password mạnh.
+3. Cấu hình subnet/security group để chỉ EC2 được truy cập DB port.
+4. Cập nhật connection string trong backend:
+   spring.datasource.url
+   spring.datasource.username
+   spring.datasource.password
+5. Chạy migration schema (Flyway/Liquibase).
+6. Kiểm tra kết nối và truy vấn dữ liệu thực tế.
+
+Checklist RDS:
+- Backend kết nối thành công.
+- CRUD chạy đầy đủ trên dữ liệu thật.
+- Có snapshot backup theo lịch.
+
+
+3) Amazon S3 (Simple Storage System)
+
+Các bước thực hiện:
+1. Tạo S3 bucket cho frontend (và có thể bucket riêng cho document nếu cần).
+2. Build frontend:
+   npm run build hoặc pnpm build.
+3. Upload thư mục dist lên bucket.
+4. Cấu hình static website hosting (hoặc dùng CloudFront).
+5. Cấu hình policy/public access đúng cách.
+6. Cập nhật biến môi trường frontend trỏ về API backend thật.
+
+Checklist S3:
+- Frontend truy cập được ổn định.
+- Gọi API backend đúng domain triển khai.
+- Không còn hard-code localhost trong bản build production.
+
+
+Rủi ro thường gặp khi deploy AWS
+- CORS sai origin giữa S3 domain và backend.
+- Security Group chưa mở đúng cổng.
+- Frontend build bằng nhầm biến môi trường local.
+- DB connection timeout do cấu hình mạng VPC.
+
+Cách giảm rủi ro
+- Dùng checklist pre-deploy và post-deploy.
+- Tách rõ file env local/staging/prod.
+- Kiểm thử smoke test sau mỗi lần release.
+
+
+### 2.9.2 Demo sản phẩm
+
+Mục tiêu:
+- Trình diễn luồng nghiệp vụ chính từ đầu đến cuối trên môi trường thật.
+
+A. Kịch bản demo đề xuất (10-15 phút)
+
+1. Giới thiệu nhanh kiến trúc
+- Frontend trên S3
+- Backend trên EC2
+- DB trên RDS
+
+2. Demo xác thực
+- Đăng ký/đăng nhập.
+- Hiển thị thông tin user hiện tại.
+
+3. Demo quản lý tài liệu
+- Tạo thư mục.
+- Upload tài liệu.
+- Xem danh sách và chi tiết.
+- Đổi tên hoặc di chuyển tài liệu.
+
+4. Demo chia sẻ và phân quyền
+- Gửi sharing request từ User A sang User B.
+- User B duyệt yêu cầu.
+- Kiểm tra User B đã xem/tải tài liệu được chia sẻ.
+
+5. Demo kiểm soát quyền
+- Thực hiện thao tác không đủ quyền để hệ thống trả 403.
+
+6. Demo chức năng Admin
+- Xem danh sách user.
+- Cập nhật role người dùng.
+
+B. Chuẩn bị trước buổi demo
+- Dữ liệu mẫu: user A, user B, admin, vài tài liệu mẫu.
+- Kịch bản dự phòng khi mạng yếu.
+- Mở sẵn dashboard log backend để chứng minh request đi qua hệ thống.
+
+C. Tiêu chí đánh giá demo thành công
+- Các luồng chính chạy xuyên suốt không lỗi nghiêm trọng.
+- Phân quyền hoạt động đúng.
+- Dữ liệu lưu/truy xuất nhất quán giữa frontend và backend.
+- Môi trường AWS hoạt động ổn định.
+
+D. Đoạn kết luận mẫu cho báo cáo
+"Sau khi hoàn tất phát triển với Spring Boot, hệ thống đã được triển khai thực tế trên AWS theo mô hình EC2 - RDS - S3 và kiểm thử đầy đủ các luồng nghiệp vụ chính. Kết quả demo cho thấy ứng dụng đáp ứng tốt các yêu cầu chức năng, phân quyền truy cập và khả năng vận hành ổn định trong phạm vi MVP."
+
+
+PHU LUC GOI Y BANG TONG HOP (CO THE THEM VAO BAO CAO)
+======================================================
+
+1. Bảng endpoint và trạng thái kiểm thử
+- Endpoint | Method | Chức năng | Kỳ vọng | Kết quả
+
+2. Bảng checklist triển khai AWS
+- Thành phần | Trạng thái | Ghi chú cấu hình
+
+3. Bảng checklist demo
+- Bước demo | Kết quả | Ghi chú
+
+
+PHIÊN BẢN ĐIỀN SẴN THEO DỰ ÁN CỦA BẠN
+=====================================
+
+Phần dưới đây là bản nội dung đã điền sẵn theo đúng hệ thống quản lý tài liệu hiện tại. Bạn có thể đưa thẳng vào báo cáo hoặc chỉnh rất ít cho phù hợp văn phong của trường.
+
+
+## 2.8. PHÁT TRIỂN DỰ ÁN VỚI SPRING BOOT
+
+Trong giai đoạn phát triển backend, nhóm sử dụng Spring Boot để hiện thực toàn bộ nghiệp vụ quản lý tài liệu, từ xác thực người dùng, quản lý thư mục, quản lý tài liệu đến chia sẻ và phân quyền. Kiến trúc hệ thống được tổ chức theo mô hình nhiều tầng nhằm tách biệt rõ trách nhiệm giữa tầng điều khiển, tầng xử lý nghiệp vụ và tầng truy cập dữ liệu.
+
+
+### 2.8.1 Thiết kế Database cho ứng dụng
+
+Cơ sở dữ liệu của hệ thống được thiết kế theo mô hình quan hệ nhằm bảo đảm tính nhất quán dữ liệu và hỗ trợ tốt cho các thao tác truy vấn, cập nhật và kiểm soát quyền truy cập. Các thực thể chính bao gồm User, Folder, Document, Permission và SharingRequest.
+
+Thực thể User lưu thông tin tài khoản người dùng như họ tên, email, mật khẩu đã mã hóa và vai trò hệ thống. Thực thể Folder dùng để tổ chức tài liệu theo cấu trúc thư mục và liên kết với người sở hữu. Thực thể Document lưu metadata của tài liệu như tên, loại tệp, kích thước, đường dẫn lưu trữ, chủ sở hữu và thư mục chứa tài liệu. Thực thể Permission lưu quyền truy cập mà một người dùng được cấp đối với một tài liệu cụ thể. Thực thể SharingRequest lưu các yêu cầu chia sẻ tài liệu và trạng thái xử lý của từng yêu cầu.
+
+Các quan hệ trong hệ thống được xác định như sau:
+- Một User có thể sở hữu nhiều Folder và nhiều Document.
+- Một Folder có thể chứa nhiều Document.
+- Một Document có thể được gán nhiều Permission.
+- Một Document có thể phát sinh nhiều SharingRequest.
+- Một User có thể là người gửi hoặc người nhận yêu cầu chia sẻ.
+
+Để tăng tính toàn vẹn dữ liệu, hệ thống áp dụng các ràng buộc như unique cho email người dùng, unique cho cặp document_id - recipient_id trong Permission, cùng với các khóa ngoại giữa Document, Folder và User. Ngoài ra, các trường truy vấn thường xuyên như owner_id, folder_id, document_id, recipient_id và status được lập chỉ mục để tối ưu hiệu năng.
+
+Triển khai thực tế được thực hiện bằng JPA Entity kết hợp với migration tool để version hóa schema. Cách làm này giúp quá trình phát triển và triển khai dễ kiểm soát hơn, đồng thời hạn chế sai lệch giữa mã nguồn và cấu trúc dữ liệu thực tế.
+
+
+### 2.8.2 Xây dựng chức năng CRUD
+
+Các chức năng CRUD của hệ thống được triển khai theo kiến trúc phân tầng gồm Controller, Service và Repository. Cách tổ chức này giúp tách biệt rõ việc tiếp nhận request, xử lý nghiệp vụ và tương tác với cơ sở dữ liệu.
+
+Ở module thư mục, hệ thống hỗ trợ tạo mới thư mục, lấy danh sách thư mục, cập nhật tên thư mục và xóa thư mục. Các thao tác này luôn gắn với người dùng hiện tại để bảo đảm chỉ chủ sở hữu hoặc tài khoản hợp lệ mới có thể thay đổi dữ liệu.
+
+Ở module tài liệu, hệ thống hỗ trợ upload tài liệu, xem danh sách tài liệu, xem chi tiết tài liệu, cập nhật metadata, di chuyển tài liệu sang thư mục khác và xóa tài liệu. Khi upload, file được lưu vào kho lưu trữ, còn metadata được ghi vào cơ sở dữ liệu. Khi xóa, hệ thống cần xử lý đồng thời phần dữ liệu trong database và phần file vật lý nếu có.
+
+Ở module chia sẻ, CRUD được hiểu theo nghiệp vụ gồm tạo yêu cầu chia sẻ, xem danh sách yêu cầu, duyệt yêu cầu, từ chối yêu cầu và cập nhật trạng thái xử lý. Các yêu cầu chia sẻ thường không xóa cứng mà được quản lý bằng trạng thái để dễ truy vết lịch sử.
+
+Tất cả các thao tác CRUD đều được kiểm tra quyền trước khi thực thi. Người dùng chỉ có thể sửa hoặc xóa tài liệu khi có quyền phù hợp, còn các thao tác quản trị chỉ dành cho tài khoản có vai trò Admin. Khi có lỗi đầu vào hoặc xung đột dữ liệu, hệ thống trả về mã lỗi phù hợp như 400, 401, 403, 404 hoặc 409 để frontend xử lý thống nhất.
+
+
+### 2.8.3 Tạo và quản lý API Endpoints
+
+API của hệ thống được thiết kế theo chuẩn RESTful và có version hóa thông qua tiền tố /api/v1 để thuận tiện cho việc mở rộng trong tương lai. Các endpoint được tổ chức theo từng nhóm nghiệp vụ để dễ quản lý và dễ tích hợp với frontend.
+
+Nhóm Authentication bao gồm các endpoint:
+- POST /api/v1/auth/register: đăng ký tài khoản mới.
+- POST /api/v1/auth/login: đăng nhập và nhận JWT.
+- GET /api/v1/auth/me: lấy thông tin người dùng hiện tại.
+- POST /api/v1/auth/logout: đăng xuất và kết thúc phiên làm việc.
+
+Nhóm Folder bao gồm các endpoint:
+- GET /api/v1/folders: xem danh sách thư mục.
+- POST /api/v1/folders: tạo thư mục mới.
+- PATCH /api/v1/folders/:id: cập nhật thông tin thư mục.
+- DELETE /api/v1/folders/:id: xóa thư mục.
+
+Nhóm Document bao gồm các endpoint:
+- GET /api/v1/documents: xem danh sách tài liệu.
+- POST /api/v1/documents/upload: tải tài liệu lên hệ thống.
+- GET /api/v1/documents/:id: xem chi tiết tài liệu.
+- PATCH /api/v1/documents/:id: cập nhật tài liệu.
+- POST /api/v1/documents/:id/move: di chuyển tài liệu sang thư mục khác.
+- DELETE /api/v1/documents/:id: xóa tài liệu.
+
+Nhóm Permission và Sharing bao gồm các endpoint:
+- GET /api/v1/permissions: xem quyền truy cập.
+- POST /api/v1/sharing-requests: gửi yêu cầu chia sẻ.
+- GET /api/v1/sharing-requests: xem danh sách yêu cầu chia sẻ.
+- POST /api/v1/sharing-requests/:id/approve: duyệt yêu cầu.
+- POST /api/v1/sharing-requests/:id/reject: từ chối yêu cầu.
+
+Nhóm Admin bao gồm các endpoint:
+- GET /api/v1/users: xem danh sách người dùng.
+- PATCH /api/v1/users/:id/role: thay đổi vai trò người dùng.
+- GET /api/v1/users/audit/export: xuất nhật ký quản trị.
+
+Tất cả API phản hồi theo một cấu trúc thống nhất, bao gồm mã trạng thái, thông báo và dữ liệu trả về. Các endpoint bảo vệ đều yêu cầu token JWT trong header Authorization, và backend kiểm tra quyền trước khi trả dữ liệu hoặc cho phép thay đổi dữ liệu.
+
+
+### 2.8.4 Kiểm thử API bằng Postman
+
+Kiểm thử API được thực hiện bằng Postman theo chuỗi nghiệp vụ hoàn chỉnh để bảo đảm các endpoint hoạt động đúng thiết kế. Nhóm tạo các environment như local, staging và production để dễ chuyển đổi cấu hình giữa các môi trường.
+
+Quy trình test thường bắt đầu bằng xác thực: đăng ký tài khoản, đăng nhập để lấy token, sau đó gọi /auth/me để xác minh token hợp lệ. Tiếp theo, nhóm kiểm thử các API thư mục và tài liệu như tạo thư mục, upload tài liệu, xem danh sách, xem chi tiết, cập nhật, di chuyển và xóa. Sau đó, nhóm kiểm thử luồng chia sẻ bằng cách gửi yêu cầu chia sẻ từ một người dùng sang người dùng khác, duyệt hoặc từ chối yêu cầu và kiểm tra quyền truy cập được cập nhật chính xác hay không.
+
+Trong Postman, nhóm sử dụng các biến môi trường như base_url, access_token, test_user_id và test_document_id để tái sử dụng trong các request liên tiếp. Ngoài status code, nhóm còn kiểm tra nội dung response, kiểm tra các trường bắt buộc, và xác nhận các trường hợp lỗi như 401 khi thiếu token hoặc 403 khi không đủ quyền.
+
+Kết quả kiểm thử được tổng hợp thành bảng gồm endpoint, method, kết quả mong đợi, kết quả thực tế và ghi chú lỗi nếu có. Cách kiểm thử này giúp phát hiện sớm lỗi logic nghiệp vụ, lỗi phân quyền và lỗi tích hợp giữa frontend và backend.
+
+
+## 2.9. HOÀN THÀNH VÀ DEMO DỰ ÁN
+
+Sau khi hoàn thành chức năng backend, hệ thống được đưa lên môi trường triển khai thật trên AWS để kiểm thử tích hợp và trình diễn sản phẩm. Mô hình triển khai gồm frontend tĩnh trên S3, backend Spring Boot chạy trên EC2 và cơ sở dữ liệu PostgreSQL chạy trên RDS.
+
+
+### 2.9.1 Triển khai ứng dụng lên AWS
+
+#### EC2 AWS
+
+Backend Spring Boot được build thành file jar và triển khai trên một instance EC2. Trên máy EC2, nhóm cài đặt Java runtime, cấu hình security group để mở cổng SSH và cổng dịch vụ backend, sau đó chạy ứng dụng bằng lệnh java -jar. Trong môi trường thực tế, backend có thể được cấu hình chạy kèm systemd hoặc reverse proxy Nginx để tăng độ ổn định và tiện quản lý.
+
+Mục tiêu của bước này là làm cho API backend có thể truy cập từ bên ngoài, đồng thời bảo đảm ứng dụng có thể khởi động lại ổn định sau khi reboot máy chủ.
+
+#### RDS (Relational Database Service)
+
+Cơ sở dữ liệu PostgreSQL được triển khai trên Amazon RDS để tăng độ ổn định và giảm công sức vận hành so với cài đặt thủ công trên máy chủ riêng. Backend cập nhật thông số kết nối như URL, username và password để trỏ sang instance RDS. Sau khi kết nối thành công, nhóm chạy migration để tạo schema và kiểm thử các thao tác CRUD trên dữ liệu thật.
+
+Việc dùng RDS giúp hệ thống có khả năng sao lưu, snapshot và mở rộng tốt hơn, đồng thời tách biệt rõ tầng ứng dụng và tầng dữ liệu.
+
+#### Amazon S3 (Simple Storage System)
+
+Frontend của hệ thống được build và triển khai dưới dạng static website trên Amazon S3. Sau khi build, thư mục dist được upload lên bucket. Nếu cần, nhóm có thể kết hợp CloudFront để tăng tốc độ phân phối nội dung. Ở phía frontend, biến môi trường được cấu hình để gọi đúng API backend thật thay vì localhost.
+
+S3 phù hợp với SPA tĩnh như React/Vite vì dễ triển khai, dễ mở rộng và chi phí vận hành thấp. Trong báo cáo, phần này cần nhấn mạnh rằng frontend production phải trỏ đúng domain backend, đồng thời không còn hard-code môi trường local.
+
+Rủi ro thường gặp khi triển khai AWS gồm lỗi CORS, sai cấu hình security group, sai biến môi trường build và lỗi kết nối mạng giữa EC2 với RDS. Nhóm giảm thiểu các rủi ro này bằng checklist trước và sau triển khai, cùng với smoke test sau mỗi lần release.
+
+
+### 2.9.2 Demo sản phẩm
+
+Phần demo được thiết kế theo luồng nghiệp vụ thực tế để chứng minh hệ thống hoạt động trọn vẹn từ đầu đến cuối. Nếu báo cáo in ra giấy, phần demo nên trình bày bằng ảnh chụp màn hình theo từng bước và kèm theo đường dẫn hoặc mã QR đến video demo đầy đủ.
+
+Kịch bản demo gồm các bước chính sau:
+1. Giới thiệu kiến trúc triển khai trên AWS với frontend, backend và database tách biệt.
+2. Thực hiện đăng ký hoặc đăng nhập để lấy token và vào dashboard.
+3. Tạo thư mục, upload tài liệu và kiểm tra danh sách tài liệu hiển thị đúng.
+4. Xem chi tiết tài liệu, đổi tên hoặc di chuyển tài liệu sang thư mục khác.
+5. Gửi yêu cầu chia sẻ từ người dùng A sang người dùng B.
+6. Duyệt yêu cầu chia sẻ và kiểm tra quyền truy cập được cập nhật.
+7. Thực hiện một thao tác không đủ quyền để hệ thống trả về lỗi 403.
+8. Kiểm tra chức năng Admin như xem danh sách user và cập nhật vai trò.
+
+Để buổi demo rõ ràng và thuyết phục, nhóm chuẩn bị sẵn dữ liệu mẫu, log backend, ảnh Postman, và các màn hình đã hoạt động trên môi trường AWS. Cách trình bày này giúp người xem dễ đối chiếu giữa phần mô tả trong báo cáo và hành vi thực tế của hệ thống.
+
+Đoạn kết luận mẫu cho báo cáo:
+"Sau khi hoàn tất phát triển với Spring Boot, hệ thống đã được triển khai thực tế trên AWS theo mô hình EC2 - RDS - S3 và kiểm thử đầy đủ các luồng nghiệp vụ chính. Kết quả demo cho thấy ứng dụng đáp ứng tốt các yêu cầu chức năng, phân quyền truy cập và khả năng vận hành ổn định trong phạm vi MVP." 

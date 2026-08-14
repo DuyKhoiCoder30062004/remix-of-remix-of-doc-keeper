@@ -1,0 +1,410 @@
+HƯỚNG DẪN TRÌNH BÀY CLASS DIAGRAM TRONG BÁO CÁO
+==============================================
+
+Mục tiêu
+--------
+Tài liệu này hướng dẫn bạn cách trình bày Class Diagram trong báo cáo sao cho:
+- Dễ đọc
+- Đúng kỹ thuật
+- Khớp với code thực tế
+- Dễ bảo vệ khi thuyết trình
+
+
+1. Class Diagram dùng để làm gì trong báo cáo?
+----------------------------------------------
+Class Diagram dùng để mô tả cấu trúc tĩnh của hệ thống ở mức mã nguồn:
+- Hệ thống có những lớp nào
+- Mỗi lớp có trách nhiệm gì
+- Các lớp liên kết/phụ thuộc với nhau ra sao
+
+Trong báo cáo, Class Diagram không chỉ là hình minh họa, mà là cầu nối giữa:
+- Phần phân tích yêu cầu (FR/NFR)
+- Phần thiết kế (ERD, kiến trúc)
+- Phần triển khai thực tế bằng Spring Boot
+
+
+2. Cấu trúc trình bày chuẩn cho mục Class Diagram
+-------------------------------------------------
+Bạn nên trình bày theo thứ tự sau:
+
+2.1 Mở đầu ngắn (2-4 câu)
+- Nêu mục đích của Class Diagram
+- Nêu phạm vi lớp được mô tả
+- Nêu nguyên tắc phân tầng kiến trúc
+
+2.2 Sơ đồ lớp tổng quan (Overview)
+- Thể hiện các tầng chính:
+  - Controller
+  - Service
+  - Repository
+  - Entity
+- Không cần quá nhiều method chi tiết
+
+2.3 Sơ đồ lớp theo từng module
+- Tách thành nhiều sơ đồ con nếu hệ thống lớn
+- Mỗi sơ đồ con nên tập trung 1 cụm nghiệp vụ
+
+2.4 Mô tả dưới từng hình
+- Mỗi hình có 1 đoạn giải thích 4-6 dòng
+
+2.5 Kết luận mục
+- Tổng kết vai trò của thiết kế lớp
+- Liên hệ với code và khả năng mở rộng
+
+
+3. Cách chia sơ đồ lớp cho dự án Spring Boot của bạn
+-----------------------------------------------------
+Với dự án quản lý tài liệu, nên chia tối thiểu thành 3 cụm:
+
+3.1 Cụm Xác thực và Người dùng
+- AuthController
+- AuthService
+- JwtService
+- JwtAuthenticationFilter
+- UserEntity/UserRepository/UserService
+
+Mục đích:
+- Mô tả luồng đăng ký, đăng nhập, xác thực JWT
+
+3.2 Cụm Thư mục và Tài liệu
+- FolderController/FolderService/FolderRepository
+- DocumentController/DocumentService/DocumentRepository
+- FolderEntity, DocumentEntity
+
+Mục đích:
+- Mô tả CRUD thư mục/tài liệu
+- Mô tả quan hệ owner/folder/document
+
+3.3 Cụm Chia sẻ và Phân quyền
+- PermissionController/PermissionService/PermissionRepository
+- SharingRequestController/SharingRequestService/SharingRequestRepository
+- PermissionEntity, SharingRequestEntity
+
+Mục đích:
+- Mô tả luồng gửi yêu cầu, duyệt/từ chối, cấp quyền
+
+
+4. Mỗi class nên hiển thị những gì?
+-----------------------------------
+Không cần đưa toàn bộ code vào sơ đồ. Chỉ nên giữ phần quan trọng:
+
+4.1 Tên class
+- Ví dụ: DocumentService
+
+4.2 Thuộc tính chính (3-6 thuộc tính)
+- Chỉ giữ thuộc tính có ý nghĩa nghiệp vụ
+- Với Entity nên ưu tiên: id, foreign key, trạng thái, thời gian
+
+4.3 Phương thức chính (3-6 phương thức)
+- Ví dụ ở Service:
+  createDocument(), updateDocument(), moveDocument(), deleteDocument()
+- Không cần liệt kê getter/setter
+
+4.4 Quan hệ giữa các class
+- Association
+- Dependency
+- Inheritance (nếu có)
+- Composition/Aggregation (nếu có)
+
+Nếu công cụ cho hiển thị bội số (1..*, 0..1), nên hiển thị để rõ ngữ nghĩa.
+
+
+5. Quy ước trình bày để sơ đồ không rối
+----------------------------------------
+- Đặt lớp trung tâm ở giữa cụm
+- Đặt lớp cùng tầng gần nhau
+- Mũi tên gọi hàm đi một chiều thống nhất (thường từ trái sang phải)
+- Hạn chế đường nối giao nhau
+- Dùng màu nhẹ để phân biệt tầng (nếu cần)
+
+Khuyến nghị:
+- Controller đặt phía trên
+- Service ở giữa
+- Repository phía dưới
+- Entity bên cạnh hoặc phía dưới cùng
+
+
+6. Cách viết mô tả dưới hình Class Diagram
+------------------------------------------
+Mỗi hình nên trả lời 4 câu hỏi:
+1. Hình này mô tả module nào?
+2. Lớp trung tâm là lớp nào?
+3. Luồng gọi chính đi theo hướng nào?
+4. Quan hệ nào là quan trọng nhất?
+
+Mẫu mô tả 1:
+"Hình này mô tả cụm lớp xác thực và người dùng. AuthController tiếp nhận yêu cầu đăng nhập/đăng ký từ client và ủy quyền xử lý cho AuthService. AuthService phối hợp với JwtService để tạo và xác thực token, đồng thời làm việc với UserRepository để truy xuất dữ liệu tài khoản. Thiết kế này giúp tách biệt rõ trách nhiệm giữa tầng API, nghiệp vụ và truy cập dữ liệu."
+
+Mẫu mô tả 2:
+"Hình này mô tả cụm lớp tài liệu và thư mục. DocumentService giữ vai trò trung tâm, xử lý các thao tác CRUD và điều phối giữa DocumentRepository, FolderRepository và kiểm tra quyền truy cập. Quan hệ giữa DocumentEntity và FolderEntity phản ánh đúng mô hình dữ liệu trong ERD, bảo đảm tính nhất quán từ thiết kế đến triển khai."
+
+
+7. Cách liên kết Class Diagram với phần code
+--------------------------------------------
+Đây là phần rất quan trọng khi viết báo cáo kỹ thuật.
+
+Bạn cần bảo đảm:
+- Tên class trong hình phải khớp 100% với tên class trong code
+- Tên method trong hình là method thật hoặc method đại diện đúng nghiệp vụ
+- Không đưa class "ảo" chỉ để làm đẹp hình
+
+Nên bổ sung một câu trong báo cáo:
+"Các lớp được trình bày trong sơ đồ đều đối chiếu trực tiếp từ mã nguồn backend hiện tại nhằm bảo đảm tính nhất quán giữa tài liệu thiết kế và hệ thống triển khai."
+
+
+8. Nếu sơ đồ quá lớn thì xử lý như thế nào?
+------------------------------------------
+Nếu Class Diagram quá lớn (nhiều class), không nên ép vào 1 trang:
+
+Cách xử lý đúng:
+- Đặt 1 sơ đồ overview trong thân bài
+- Tách các cụm chi tiết thành nhiều hình con
+- Đưa bản đầy đủ vào phụ lục
+
+Khuyến nghị cho bản in:
+- Chữ trong sơ đồ tối thiểu đọc được khi in A4
+- Nếu vẫn nhỏ, chuyển trang ngang (landscape)
+- Luôn có caption và mô tả ngắn dưới hình
+
+
+9. Mẫu caption nên dùng
+-----------------------
+- Hình 2.X. Sơ đồ lớp tổng quan hệ thống quản lý tài liệu
+- Hình 2.X+1. Cụm lớp xác thực và người dùng
+- Hình 2.X+2. Cụm lớp thư mục và tài liệu
+- Hình 2.X+3. Cụm lớp chia sẻ và phân quyền
+
+
+10. Mẫu đoạn mở đầu và kết thúc để dán vào báo cáo
+---------------------------------------------------
+Mẫu mở đầu:
+"Class Diagram của hệ thống được xây dựng nhằm mô tả cấu trúc lớp ở tầng backend theo kiến trúc phân lớp. Các lớp được tổ chức theo các nhóm Controller, Service, Repository và Entity, qua đó thể hiện rõ trách nhiệm từng tầng và mối liên hệ trong quá trình xử lý nghiệp vụ."
+
+Mẫu kết thúc:
+"Việc chuẩn hóa Class Diagram giúp nhóm phát triển kiểm soát tốt kiến trúc mã nguồn, bảo đảm tính nhất quán với ERD và yêu cầu nghiệp vụ, đồng thời tạo thuận lợi cho mở rộng chức năng và bảo trì hệ thống trong các giai đoạn tiếp theo."
+
+
+11. Checklist nhanh trước khi nộp
+---------------------------------
+- Đã có sơ đồ tổng quan chưa?
+- Đã chia cụm module hợp lý chưa?
+- Tên class có khớp code thực tế chưa?
+- Đã bỏ bớt getter/setter dư thừa chưa?
+- Caption từng hình đã rõ chưa?
+- Mỗi hình đã có đoạn mô tả ngắn chưa?
+- Nếu hình lớn, đã đưa bản đầy đủ vào phụ lục chưa?
+
+
+12. Kết luận thực hành
+----------------------
+Muốn phần Class Diagram được đánh giá tốt trong báo cáo, bạn cần:
+- Trình bày theo cụm nghiệp vụ
+- Nhất quán với code thật
+- Mô tả rõ ý nghĩa dưới từng hình
+- Tránh nhồi quá nhiều chi tiết kỹ thuật không cần thiết
+
+Làm đúng các bước trên sẽ giúp báo cáo của bạn vừa chắc về kỹ thuật, vừa rõ về cách truyền đạt.
+
+
+13. PHIÊN BẢN ĐIỀN SẴN THEO DỰ ÁN CỦA BẠN
+------------------------------------------
+Phần này là nội dung đã điền chi tiết theo đúng hệ thống quản lý tài liệu của bạn. Bạn có thể dùng trực tiếp cho báo cáo.
+
+13.1 Đoạn mở đầu mục Class Diagram (điền sẵn)
+"Class Diagram của hệ thống được xây dựng nhằm mô tả cấu trúc lớp backend theo kiến trúc phân tầng trong Spring Boot. Các lớp được tổ chức theo bốn tầng chính gồm Controller, Service, Repository và Entity. Cách tổ chức này giúp tách biệt trách nhiệm rõ ràng giữa tầng tiếp nhận yêu cầu, tầng xử lý nghiệp vụ và tầng truy cập dữ liệu, đồng thời bảo đảm tính nhất quán với mô hình ERD đã phân tích ở phần trước."
+
+13.2 Mô tả sơ đồ lớp tổng quan (điền sẵn)
+Sơ đồ lớp tổng quan của hệ thống bao gồm các nhóm lớp sau:
+
+- Nhóm xác thực và người dùng:
+  AuthController, AuthService, JwtService,
+  UserManagerController, UserManagerService,
+  UserManagerRepository, UserManager.
+
+- Nhóm quản lý thư mục và tài liệu:
+  FolderManagerController, FolderManagerService, FolderManagerRepository, FolderManager;
+  DocumentManageService, DocumentManageRepository, DocumentManage.
+
+- Nhóm chia sẻ và phân quyền:
+  PermissionManagerController, PermissionManagerService,
+  PermissionManagerRepository, PermissionManager,
+  SharingRequestManager.
+
+Luồng gọi chuẩn được tổ chức theo hướng:
+Controller -> Service -> Repository -> Entity/Database.
+
+13.3 Mô tả chi tiết cụm 1: Xác thực và người dùng (điền sẵn)
+
+Thành phần chính:
+- AuthController: cung cấp endpoint đăng ký, đăng nhập, lấy thông tin user hiện tại.
+- AuthService: xử lý xác thực, kiểm tra tài khoản, tạo phản hồi đăng nhập.
+- JwtService: tạo token, kiểm tra token, trích xuất userId/role.
+- UserManagerService: xử lý nghiệp vụ quản lý người dùng.
+- UserManagerRepository: truy vấn người dùng theo email/id.
+- UserManager: lưu thông tin tài khoản và vai trò.
+
+Phương thức đại diện nên hiển thị trên sơ đồ:
+- AuthController: register(), login(), getCurrentUser(), logout().
+- AuthService: register(), login(), getCurrentUser(), logout().
+- JwtService: generateToken(), extractUserId(), extractRole(), isTokenValid().
+- UserManagerController: getAllUsers(), getUserById(), exportAuditLogs(), updateUserRole(), deleteUser().
+- UserManagerService: getAllUsers(), getUserById(), createUser(), updateUser(), deleteUserById().
+
+Quan hệ quan trọng:
+- AuthController phụ thuộc AuthService.
+- AuthController phụ thuộc JwtService.
+- AuthService phụ thuộc UserManagerRepository và JwtService.
+- UserManagerController phụ thuộc UserManagerService.
+
+Đoạn mô tả dưới hình (copy dùng ngay):
+"Cụm lớp xác thực và người dùng thể hiện luồng đăng ký/đăng nhập dựa trên JWT. AuthController tiếp nhận yêu cầu từ client và ủy quyền xử lý cho AuthService; AuthService truy xuất dữ liệu qua UserManagerRepository và dùng JwtService để tạo, kiểm tra token. Ở phía quản trị người dùng, UserManagerController gọi UserManagerService để thực hiện các thao tác xem danh sách user, cập nhật vai trò và xuất nhật ký."
+
+13.4 Mô tả chi tiết cụm 2: Thư mục và tài liệu (điền sẵn)
+
+Thành phần chính:
+- FolderManagerController, FolderManagerService, FolderManagerRepository, FolderManager.
+- DocumentManageService, DocumentManageRepository, DocumentManage.
+
+Nghiệp vụ chính:
+- Tạo/sửa/xóa thư mục.
+- Upload/list/get/update/move/delete tài liệu.
+- Kiểm tra owner/quyền truy cập trước thao tác sửa/xóa.
+
+Phương thức đại diện nên hiển thị:
+- FolderManagerController: getAllFolders(), getFolderById(), createFolder(), updateFolder(), deleteFolder().
+- FolderManagerService: getAllFolders(), getFolderById(), createFolder(), updateFolder(), deleteFolderById().
+- DocumentManageService: getDocuments(), searchDocuments(), getDocumentById(), createDocument(), updateDocument(), moveDocument(), deleteDocumentById().
+
+Quan hệ quan trọng:
+- FolderManagerController phụ thuộc FolderManagerService, AuthService, JwtService.
+- FolderManagerService phụ thuộc FolderManagerRepository và UserManagerRepository.
+- DocumentManageService phụ thuộc DocumentManageRepository, FolderManagerRepository, UserManagerRepository, PermissionManagerRepository.
+- UserManager có quan hệ 1-n với FolderManager và DocumentManage.
+- FolderManager có quan hệ 1-n với DocumentManage.
+
+Đoạn mô tả dưới hình (copy dùng ngay):
+"Cụm lớp thư mục và tài liệu mô tả luồng CRUD cốt lõi của hệ thống. FolderManagerController phối hợp AuthService/JwtService để xác định người dùng hiện tại trước khi gọi FolderManagerService. Ở phần tài liệu, DocumentManageService đóng vai trò trung tâm, điều phối thao tác tạo, cập nhật, di chuyển và xóa tài liệu thông qua các repository tương ứng. Các quan hệ UserManager - FolderManager - DocumentManage phản ánh đúng cấu trúc dữ liệu trong ERD."
+
+13.5 Mô tả chi tiết cụm 3: Chia sẻ và phân quyền (điền sẵn)
+
+Thành phần chính:
+- PermissionManagerController, PermissionManagerService, PermissionManagerRepository, PermissionManager.
+- SharingRequestManager.
+
+Nghiệp vụ chính:
+- Gửi yêu cầu chia sẻ tài liệu.
+- Duyệt/từ chối yêu cầu.
+- Tạo hoặc cập nhật quyền truy cập sau khi duyệt.
+
+Phương thức đại diện nên hiển thị:
+- PermissionManagerController: getPermissions(), getPermissionById(), createPermission(), updatePermission(), deletePermission().
+- PermissionManagerService: getAllPermissions(), getPermissionsByDocumentId(), getPermissionById(), createPermission(), updatePermission(), deletePermissionById().
+
+Lưu ý trình bày:
+- Trong class diagram hiện tại, phần chia sẻ được biểu diễn ở mức entity qua SharingRequestManager.
+- Luồng API approve/reject của sharing request được thể hiện rõ ở sequence/activity diagram.
+
+Quan hệ quan trọng:
+- PermissionManagerController phụ thuộc PermissionManagerService.
+- PermissionManagerService phụ thuộc PermissionManagerRepository, DocumentManageRepository, UserManagerRepository.
+- DocumentManage có quan hệ 1-n với PermissionManager và SharingRequestManager.
+- UserManager có quan hệ 1-n với PermissionManager và SharingRequestManager.
+
+Đoạn mô tả dưới hình (copy dùng ngay):
+"Cụm lớp phân quyền thể hiện cơ chế kiểm soát truy cập tài liệu dựa trên PermissionManagerService. Dịch vụ này truy xuất đồng thời dữ liệu tài liệu và người dùng để tạo/cập nhật quyền truy cập phù hợp. Trong sơ đồ lớp, SharingRequestManager được liên kết trực tiếp với UserManager và DocumentManage nhằm phản ánh luồng yêu cầu chia sẻ ở mức dữ liệu; còn luồng duyệt/từ chối được chi tiết ở sequence diagram."
+
+13.6 Danh sách class/thuộc tính gợi ý để đưa vào hình (điền sẵn)
+
+UserManager:
+- userId: Integer
+- name: String
+- email: String
+- password: String
+- role: String
+- createdAt: LocalDateTime
+
+FolderManager:
+- folderId: Integer
+- name: String
+- createdAt: LocalDateTime
+
+DocumentManage:
+- docId: Integer
+- title: String
+- createdAt: LocalDateTime
+- updatedAt: LocalDateTime
+- originalFilename: String
+- contentType: String
+
+PermissionManager:
+- permId: Integer
+- accessType: String
+
+SharingRequestManager:
+- sharingReqId: Integer
+- accessType: String
+- status: String
+- createdAt: LocalDateTime
+- updatedAt: LocalDateTime
+
+13.7 Mẫu caption cụ thể (điền sẵn)
+- Hình 2.21. Sơ đồ lớp tổng quan hệ thống quản lý tài liệu.
+- Hình 2.22. Cụm lớp xác thực và người dùng.
+- Hình 2.23. Cụm lớp thư mục và tài liệu.
+- Hình 2.24. Cụm lớp chia sẻ và phân quyền truy cập.
+
+13.8 Đoạn kết mục Class Diagram (điền sẵn)
+"Từ sơ đồ lớp tổng quan và các cụm lớp chi tiết, có thể thấy hệ thống được tổ chức theo kiến trúc phân tầng rõ ràng và bám sát yêu cầu nghiệp vụ. Cách thiết kế này không chỉ bảo đảm tính nhất quán giữa yêu cầu, dữ liệu và mã nguồn, mà còn tạo điều kiện thuận lợi cho việc kiểm thử, mở rộng chức năng và bảo trì lâu dài trong các phiên bản tiếp theo."
+
+13.9 Danh sách hình cần chụp từ DIAGRAMS.md (kèm nội dung bắt buộc)
+
+Hình 2.21 - Sơ đồ lớp tổng quan (toàn bộ)
+- Nguồn chụp: phần "## 3) Class Diagram" trong DIAGRAMS.md.
+- Bắt buộc phải thấy:
+  - Nhóm AuthController/AuthService/JwtService.
+  - Nhóm FolderManagerController/FolderManagerService.
+  - Nhóm PermissionManagerController/PermissionManagerService.
+  - Nhóm UserManagerController/UserManagerService.
+  - DocumentManageService.
+  - Các entity: UserManager, FolderManager, DocumentManage, PermissionManager, SharingRequestManager.
+- Mục đích: giới thiệu toàn bộ kiến trúc lớp.
+
+Hình 2.22 - Cụm xác thực và người dùng
+- Nguồn chụp: cắt/zoom khu vực chứa AuthController, AuthService, JwtService, UserManagerController, UserManagerService, UserManager.
+- Bắt buộc phải thấy quan hệ:
+  - AuthController -> AuthService
+  - AuthController -> JwtService
+  - AuthService -> JwtService
+  - UserManagerController -> UserManagerService
+- Mục đích: giải thích đăng nhập, xác thực token, quản trị người dùng.
+
+Hình 2.23 - Cụm thư mục và tài liệu
+- Nguồn chụp: cắt/zoom khu vực FolderManagerController, FolderManagerService, DocumentManageService, FolderManager, DocumentManage.
+- Bắt buộc phải thấy:
+  - Phương thức CRUD chính của FolderManagerController/Service.
+  - Phương thức create/update/move/delete của DocumentManageService.
+  - Quan hệ UserManager "1" -> "0..*" FolderManager và DocumentManage.
+  - Quan hệ FolderManager "1" -> "0..*" DocumentManage.
+- Mục đích: giải thích luồng CRUD thư mục/tài liệu.
+
+Hình 2.24 - Cụm phân quyền và chia sẻ
+- Nguồn chụp: cắt/zoom khu vực PermissionManagerController, PermissionManagerService, PermissionManager, SharingRequestManager, DocumentManage, UserManager.
+- Bắt buộc phải thấy:
+  - Các method get/create/update/delete permission.
+  - Quan hệ DocumentManage "1" -> "0..*" PermissionManager.
+  - Quan hệ DocumentManage "1" -> "0..*" SharingRequestManager.
+  - Quan hệ UserManager "1" -> "0..*" PermissionManager và SharingRequestManager.
+- Mục đích: giải thích cơ chế cấp quyền và dữ liệu yêu cầu chia sẻ.
+
+Hình 2.25 (phụ lục) - Bản full-resolution
+- Nguồn chụp: xuất ảnh đầy đủ class diagram độ phân giải cao.
+- Vị trí đặt: Phụ lục.
+- Mục đích: đối chiếu chi tiết khi cần, tránh làm rối phần thân báo cáo.
+
+13.10 Quy trình chụp hình thực tế (áp dụng ngay)
+1. Mở DIAGRAMS.md và render class diagram bằng Mermaid preview.
+2. Chụp Hình 2.21 trước (toàn cảnh).
+3. Zoom và chụp lần lượt Hình 2.22, 2.23, 2.24 theo cụm.
+4. Xuất thêm một bản full-resolution cho phụ lục (Hình 2.25).
+5. Chèn caption + đoạn mô tả đã chuẩn bị ở Mục 13.3-13.5.
+6. Kiểm tra lại: tên class trên ảnh phải khớp tuyệt đối với DIAGRAMS.md.

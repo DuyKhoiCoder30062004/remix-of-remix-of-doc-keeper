@@ -1,0 +1,493 @@
+SOFTWARE REQUIREMENTS SPECIFICATION (SRS)
+=========================================
+
+1. Giới thiệu
+-------------
+
+- Mục đích:
+  Tài liệu SRS này xác định các yêu cầu cho ứng dụng quản lý tài liệu (MVP), hướng đến người dùng cá nhân và nhóm nhỏ.
+
+- Phạm vi:
+  Hệ thống cho phép người dùng lưu trữ, xem, tải lên, tải xuống và quản lý tài liệu theo cơ chế phân quyền vai trò và chia sẻ.
+
+- Đối tượng sử dụng:
+  Người dùng cá nhân cần một giải pháp quản lý tài liệu gọn nhẹ, an toàn, dễ sử dụng.
+
+
+2. Mô tả tổng quan
+------------------
+
+- Tổng quan hệ thống:
+  Đây là ứng dụng web client-server, hỗ trợ xác thực, quản lý thư mục/tài liệu, tìm kiếm, chia sẻ và kiểm soát quyền truy cập.
+
+- Công nghệ định hướng:
+  Frontend: React + Vite + TypeScript.
+  Backend: Spring Boot + JWT + PostgreSQL.
+
+- Giả định và phụ thuộc:
+  1. Người dùng có kết nối mạng ổn định.
+  2. Dịch vụ backend hoạt động và có thể truy cập từ frontend.
+  3. Cơ sở dữ liệu PostgreSQL hoạt động ổn định.
+  4. CORS và domain frontend được cấu hình đúng trong backend.
+  5. Trình duyệt hiện đại (Chrome/Edge/Firefox) được sử dụng.
+
+
+3. Các module chức năng
+-----------------------
+
+Phần này mô tả các nhóm chức năng nghiệp vụ cốt lõi của hệ thống. Mỗi module cần đáp ứng đúng quyền truy cập và luồng xử lý đã xác định trong FR.
+
+3.1 Đăng nhập/Đăng ký
+
+- Người dùng đăng ký bằng email và mật khẩu.
+- Người dùng đăng nhập để truy cập hệ thống.
+- Hỗ trợ quên mật khẩu/đặt lại mật khẩu (mục có thể mở rộng sau MVP nếu chưa triển khai đầy đủ).
+- Đầu ra chính: JWT token và thông tin phiên người dùng.
+- Ràng buộc: email là duy nhất; mật khẩu phải được băm trước khi lưu.
+
+3.2 Tìm kiếm tài liệu
+
+- Tìm tài liệu theo tên.
+- Hỗ trợ tìm gần đúng (partial match) và không phân biệt hoa-thường.
+- Phạm vi tìm kiếm áp dụng trên dữ liệu người dùng có quyền truy cập.
+
+3.3 Tải lên và tải xuống tài liệu
+
+- Tải lên các định dạng thông dụng: PDF, Word, Excel, hình ảnh.
+- Tải xuống tài liệu khi người dùng có đủ quyền.
+- Hệ thống kiểm tra định dạng tệp, kích thước tệp và quyền trước khi xử lý.
+- Tệp tải lên được lưu storage, đồng thời metadata được lưu vào cơ sở dữ liệu.
+
+3.4 Phân quyền theo vai trò (User/Admin)
+
+- Admin:
+  Quản lý người dùng, gán vai trò, theo dõi dữ liệu hệ thống.
+
+- User:
+  Quản lý tài liệu của mình và sử dụng các tài nguyên được cấp quyền.
+
+- Nguyên tắc phân quyền:
+  Các chức năng quản trị chỉ hiển thị và khả dụng với tài khoản có role Admin.
+
+3.5 Chia sẻ và quyền truy cập (Owner/Editor/Viewer)
+
+- Owner:
+  Toàn quyền với tài liệu (đổi tên, xóa, di chuyển, chia sẻ, cấp/thu hồi quyền).
+
+- Editor:
+  Có thể chỉnh sửa tên tài liệu, tên đuôi tệp tài liệu.
+
+- Viewer:
+  Chỉ được xem/tải xuống theo chính sách hệ thống.
+
+- Yêu cầu truy cập:
+  Người dùng cần gửi yêu cầu chia sẻ/truy cập; hệ thống xử lý duyệt/từ chối trước khi cấp quyền.
+- Khi yêu cầu được duyệt, hệ thống tạo hoặc cập nhật bản ghi permission tương ứng.
+
+3.6 Quản lý tài liệu
+
+- Tạo mới tài liệu.
+- Đổi tên tài liệu.
+- Xóa tài liệu.
+- Di chuyển tài liệu giữa các thư mục.
+- Xem metadata: tên, kích thước, định dạng, ngày tạo, chủ sở hữu.
+- Toàn bộ thao tác chỉnh sửa/xóa/di chuyển yêu cầu quyền Owner hoặc Editor theo chính sách hiện hành.
+- Mọi thao tác quan trọng đều có thể được mở rộng để ghi nhận audit log.
+
+
+4. Yêu cầu chức năng
+--------------------
+
+FR-01 Xác thực:
+- Hệ thống cho phép đăng ký/đăng nhập.
+- Sau đăng nhập thành công, hệ thống cấp JWT token hợp lệ.
+
+FR-02 Quản lý tài liệu:
+- Hỗ trợ upload, download, tạo, đổi tên, xóa, di chuyển tài liệu.d
+
+FR-03 Tìm kiếm:
+- Hỗ trợ tìm theo tên tài liệu và trả kết quả nhanh.
+
+FR-04 Chia sẻ:
+- Hỗ trợ chia sẻ tài liệu theo mức Owner/Editor/Viewer.
+
+FR-05 Kiểm soát truy cập:
+- Hệ thống kiểm tra quyền trước khi cho phép xem/sửa/xóa/tải xuống.
+
+FR-06 Chức năng quản trị:
+- Admin xem danh sách người dùng và cập nhật vai trò.
+
+FR-07 Chia sẻ theo yêu cầu:
+- Hỗ trợ gửi, duyệt, từ chối sharing request.
+
+
+5. Yêu cầu phi chức năng
+------------------------
+
+NFR-01 Hiệu năng:
+- Upload/download file nhỏ đạt thời gian phản hồi hợp lý (mục tiêu < 5 giây trong điều kiện mạng và tài nguyên bình thường).
+
+NFR-02 Bảo mật:
+- Mật khẩu được băm (hash) trước khi lưu.
+- JWT được dùng cho các endpoint bảo vệ.
+- Kiểm soát CORS đúng origin và method.
+
+NFR-03 Khả dụng:
+- Giao diện gọn, dễ dùng cho người dùng cá nhân.
+- Thông báo lỗi rõ ràng, dễ hiểu.
+
+NFR-04 Khả năng mở rộng:
+- Kiến trúc tách frontend/backend để dễ nâng cấp độc lập.
+- Có thể bổ sung module mới mà không phá vỡ luồng chính.
+
+NFR-05 Bảo trì:
+- Mã nguồn module hóa, API naming nhất quán.
+- Dễ test và dễ triển khai lại.
+
+
+6. Phạm vi MVP
+--------------
+
+- Tập trung vào bài toán người dùng cá nhân và nhóm nhỏ.
+- Không bao gồm tính năng doanh nghiệp nâng cao (workflow automation, analytics nâng cao).
+- Các module cốt lõi:
+  1. Authentication.
+  2. Document CRUD.
+  3. Search.
+  4. Sharing và permission.
+
+- Hạng mục triển khai trong MVP:
+  1. Đăng ký/đăng nhập và xác thực bằng JWT.
+  2. Quản lý thư mục cơ bản (tạo, đổi tên, xóa).
+  3. Quản lý tài liệu cơ bản (upload, download, đổi tên, xóa, di chuyển).
+  4. Tìm kiếm theo tên tài liệu.
+  5. Chia sẻ tài liệu theo quyền Owner/Editor/Viewer.
+  6. Luồng gửi và xử lý yêu cầu chia sẻ.
+
+- Hạng mục chưa thuộc MVP:
+  1. Workflow phê duyệt nhiều bước.
+  2. Báo cáo phân tích nâng cao và dashboard BI.
+  3. Tích hợp hệ thống ngoài (SSO doanh nghiệp, DMS bên thứ ba).
+  4. Phiên bản mobile app native.
+
+- Tiêu chí hoàn thành MVP:
+  1. Người dùng đăng nhập và thao tác đầy đủ trên tài liệu trong phạm vi quyền.
+  2. Chức năng chia sẻ và duyệt yêu cầu hoạt động ổn định.
+  3. Các API chính đáp ứng đúng FR/NFR đã mô tả.
+
+
+7. Giao diện người dùng
+-----------------------
+
+Nguyên tắc thiết kế giao diện cho MVP là đơn giản, dễ học, tập trung vào tác vụ chính và phản hồi rõ ràng khi thành công/thất bại.
+
+7.1 Màn hình Đăng nhập/Đăng ký
+
+- Form email, mật khẩu, (tên người dùng với đăng ký).
+- Nút Đăng nhập/Đăng ký, thông báo thành công-thất bại.
+- Điều hướng sau đăng nhập thành công: chuyển vào Dashboard tài liệu.
+
+7.2 Màn hình Dashboard tài liệu
+
+- Danh sách tài liệu (bảng/card), hiển thị tên, loại, kích thước, ngày tạo.
+- Tìm kiếm nhanh theo tên.
+- Lọc theo folder/trạng thái (nếu có).
+- Hỗ trợ phân trang hoặc tải thêm dữ liệu khi số lượng tài liệu lớn.
+
+7.3 Màn hình Quản lý thư mục
+
+- Tạo, đổi tên, xóa thư mục.
+- Kéo-thả hoặc thao tác di chuyển tài liệu qua menu (tùy theo phiên bản).
+- Hiển thị xác nhận trước các thao tác xóa để tránh mất dữ liệu ngoài ý muốn.
+
+7.4 Màn hình Chi tiết tài liệu
+
+- Xem metadata.
+- Nút Download, Đổi tên, Xóa, Di chuyển (hiển thị theo quyền).
+- Các nút thao tác được ẩn hoặc vô hiệu hóa khi người dùng không đủ quyền.
+
+7.5 Màn hình Chia sẻ và phân quyền
+
+- Chọn người nhận.
+- Chọn quyền (Owner/Editor/Viewer).
+- Gửi yêu cầu chia sẻ và theo dõi trạng thái.
+- Trạng thái yêu cầu cần thể hiện rõ: PENDING, APPROVED, REJECTED.
+
+7.6 Màn hình Admin
+
+- Danh sách user.
+- Cập nhật role.
+- Theo dõi thông tin hệ thống cần thiết.
+- Chức năng Admin được tách riêng, không hiển thị với tài khoản User thông thường.
+
+
+8. ERD (Entity Relationship Diagram)
+------------------------------------
+
+8.1 Thực thể chính
+
+- User
+- Document
+- Permission
+- SharingRequest
+- Folder (tùy chọn trong MVP, khuyến nghị có)
+
+8.2 Quan hệ
+
+- Một User sở hữu nhiều Document (1:N).
+- Một Document được chia sẻ cho nhiều User thông qua Permission (N:M thông qua bảng permission).
+- SharingRequest liên kết User và Document để xin quyền (N:1 với Document, N:1 với User).
+- Một Folder chứa nhiều Document (1:N).
+
+8.3 Ghi chú triển khai
+
+- Permission cần ràng buộc unique theo cặp (document_id, recipient_id).
+- SharingRequest cần lưu trạng thái: PENDING/APPROVED/REJECTED.
+- Document cần lưu owner_id, folder_id, mime_type, size, storage_path.
+
+
+9. Class diagram
+----------------
+
+9.1 Nhóm class backend đề xuất
+
+- AuthController, AuthService, JwtService, JwtAuthenticationFilter.
+- DocumentController, DocumentService, DocumentRepository.
+- FolderController, FolderService, FolderRepository.
+- PermissionController, PermissionService, PermissionRepository.
+- SharingRequestController, SharingRequestService, SharingRequestRepository.
+- UserController, UserService, UserRepository.
+
+9.2 Các entity chính
+
+- UserEntity:
+  id, name, email, passwordHash, role, createdAt, updatedAt.
+
+- DocumentEntity:
+  id, name, size, mimeType, storagePath, ownerId, folderId, createdAt, updatedAt.
+
+- FolderEntity:
+  id, name, ownerId, parentId, createdAt, updatedAt.
+
+- PermissionEntity:
+  id, documentId, recipientId, permissionLevel, grantedBy, grantedAt.
+
+- SharingRequestEntity:
+  id, documentId, requesterId, targetUserId, requestedPermission, status, createdAt, decidedAt.
+
+9.3 Quan hệ class
+
+- UserEntity 1 - N DocumentEntity (owner).
+- DocumentEntity 1 - N PermissionEntity.
+- UserEntity 1 - N PermissionEntity (recipient).
+- DocumentEntity 1 - N SharingRequestEntity.
+- FolderEntity 1 - N DocumentEntity.
+
+
+10. Use case diagram
+--------------------
+
+10.1 Actor
+
+- Guest.
+- User.
+- Admin.
+
+10.2 Use case chính theo actor
+
+- Guest:
+  Đăng ký, Đăng nhập.
+
+- User:
+  Xem dashboard, tìm kiếm tài liệu, upload/download, tạo-sửa-xóa-di chuyển tài liệu,
+  quản lý thư mục, gửi yêu cầu chia sẻ, duyệt/từ chối yêu cầu được gửi đến,
+  xem tài liệu được chia sẻ.
+
+- Admin:
+  Xem danh sách user, gán role, theo dõi thông tin quản trị.
+
+10.3 Include/extend để xác định nghiệp vụ
+
+- "Tải xuống tài liệu" include "Kiểm tra quyền truy cập".
+- "Chỉnh sửa tài liệu" include "Kiểm tra quyền Editor/Owner".
+- "Cấp quyền" extend từ "Duyệt yêu cầu chia sẻ".
+
+
+11. Sequence diagram
+--------------------
+
+11.1 Luồng Đăng nhập
+
+1. User nhập email/mật khẩu trên Frontend.
+2. Frontend gọi API login đến AuthController.
+3. AuthService xác minh thông tin user + mật khẩu.
+4. Nếu hợp lệ, JwtService tạo token.
+5. Backend trả token + thông tin user.
+6. Frontend lưu token và điều hướng vào dashboard.
+
+11.2 Luồng Upload tài liệu
+
+1. User chọn file và folder đích.
+2. Frontend gửi request upload đến DocumentController kèm token.
+3. JwtAuthenticationFilter xác thực token.
+4. DocumentService kiểm tra quyền tạo tài liệu trong folder.
+5. Hệ thống lưu file vào storage và metadata vào DB.
+6. Backend trả kết quả thành công + thông tin tài liệu.
+
+11.3 Luồng Chia sẻ tài liệu theo yêu cầu
+
+1. User A tạo sharing request cho User B.
+2. Frontend gọi SharingRequestController.
+3. SharingRequestService tạo bản ghi PENDING.
+4. User B xem request và chọn APPROVE/REJECT.
+5. Nếu APPROVE, PermissionService tạo/cập nhật PermissionEntity.
+6. Hệ thống cập nhật SharingRequestEntity sang APPROVED/REJECTED.
+7. Frontend hiển thị thông báo kết quả cho cả hai bên.
+
+
+Kết luận ngắn
+-------------
+
+Tài liệu SRS này đã chuyển đổi đầy đủ sang tiếng Việt có dấu và bổ sung các mục còn thiếu (UI, class diagram, use case, sequence diagram).
+Bộ yêu cầu đủ để làm cơ sở cho giai đoạn thiết kế kiến trúc, phát triển chức năng và kiểm thử MVP.
+
+
+## 2.7. LẬP KẾ HOẠCH DỰ ÁN
+
+Mục tiêu của giai đoạn này là xác định rõ domain của bài toán, hệ thống hóa các yêu cầu chức năng và phi chức năng, đồng thời chuẩn hóa tài liệu SRS và bộ sơ đồ dự án để làm nền tảng cho thiết kế, triển khai và kiểm thử hệ thống.
+
+
+### 2.7.1 Project Domain
+
+Dự án thuộc domain quản lý tài liệu bảo mật (Secure Document Management System), hướng đến người dùng cá nhân và nhóm nhỏ. Hệ thống giải quyết nhu cầu lưu trữ, tổ chức, tìm kiếm, chia sẻ tài liệu và kiểm soát truy cập theo quyền.
+
+Các đối tượng sử dụng chính gồm:
+- User: tạo thư mục, tải tài liệu lên, tải tài liệu xuống, chỉnh sửa tài liệu của mình, gửi/duyệt yêu cầu chia sẻ.
+- Admin: quản lý người dùng, gán vai trò, giám sát hoạt động hệ thống.
+
+Phạm vi kỹ thuật của domain:
+- Frontend phát triển bằng React + Vite + TypeScript.
+- Backend phát triển bằng Spring Boot, xác thực JWT.
+- Dữ liệu lưu trên PostgreSQL.
+- Hệ thống vận hành theo mô hình client-server, tách biệt frontend/backend để dễ mở rộng và bảo trì.
+
+
+### 2.7.2 Functional và Non-functional requirements
+
+#### A. Functional requirements
+
+- FR-01 Đăng ký/Đăng nhập:
+  Người dùng đăng ký tài khoản và đăng nhập để nhận JWT token hợp lệ.
+
+- FR-02 Quản lý tài liệu:
+  Hệ thống hỗ trợ upload, download, tạo mới, đổi tên, xóa, di chuyển tài liệu.
+
+- FR-03 Tìm kiếm:
+  Hỗ trợ tìm tài liệu theo tên, có thể áp dụng tìm gần đúng và không phân biệt hoa-thường.
+
+- FR-04 Chia sẻ tài liệu:
+  Owner có thể chia sẻ tài liệu cho người khác theo các mức quyền Owner/Editor/Viewer.
+
+- FR-05 Kiểm soát truy cập:
+  Mọi thao tác xem/sửa/xóa/tải xuống đều phải qua bước kiểm tra quyền.
+
+- FR-06 Quản trị người dùng:
+  Admin có thể xem danh sách user và cập nhật vai trò.
+
+- FR-07 Xử lý yêu cầu chia sẻ:
+  Hệ thống hỗ trợ luồng gửi yêu cầu, duyệt hoặc từ chối yêu cầu chia sẻ.
+
+#### B. Non-functional requirements
+
+- NFR-01 Hiệu năng:
+  Upload/download file nhỏ cần phản hồi trong thời gian hợp lý (mục tiêu dưới 5 giây ở điều kiện thông thường).
+
+- NFR-02 Bảo mật:
+  Mật khẩu lưu dưới dạng hash; endpoint bảo vệ bằng JWT; cấu hình CORS đúng origin.
+
+- NFR-03 Khả dụng:
+  Giao diện rõ ràng, thao tác đơn giản, thông báo lỗi dễ hiểu.
+
+- NFR-04 Khả năng mở rộng:
+  Kiến trúc tách lớp và tách frontend/backend để dễ mở rộng module.
+
+- NFR-05 Bảo trì:
+  Mã nguồn module hóa, đặt tên API nhất quán, dễ test và triển khai lại.
+
+
+### 2.7.3 Viết Software Requirement Specification (SRS)
+
+Trong giai đoạn này, nhóm xây dựng tài liệu Software Requirement Specification (SRS) nhằm chuẩn hóa toàn bộ yêu cầu của hệ thống quản lý tài liệu và tạo cơ sở thống nhất cho các bước thiết kế, phát triển, kiểm thử và nghiệm thu.
+
+Về phạm vi áp dụng, tài liệu SRS được sử dụng cho phiên bản MVP của dự án, tập trung vào các nhóm chức năng cốt lõi gồm: xác thực người dùng, quản lý thư mục và tài liệu, tìm kiếm, chia sẻ theo quyền, và quản trị vai trò người dùng.
+
+Về cấu trúc trình bày, SRS được tổ chức thành 11 phần chính như sau:
+1. Giới thiệu (mục đích, phạm vi, đối tượng sử dụng).
+2. Mô tả tổng quan hệ thống (kiến trúc, công nghệ, giả định/phụ thuộc).
+3. Các module chức năng chính.
+4. Danh sách yêu cầu chức năng (FR).
+5. Danh sách yêu cầu phi chức năng (NFR).
+6. Phạm vi MVP.
+7. Mô tả giao diện người dùng.
+8. Mô hình dữ liệu ERD.
+9. Thiết kế lớp ở mức hệ thống (Class Diagram).
+10. Use Case theo actor.
+11. Sequence Diagram cho các luồng nghiệp vụ trọng tâm.
+
+Để bảo đảm tính truy vết, từng yêu cầu trong SRS được đặc tả theo nguyên tắc nhất quán: có mã yêu cầu (FR/NFR), mô tả rõ nội dung, xác định ràng buộc hoặc điều kiện áp dụng, và nêu kết quả mong đợi sau khi thực thi. Cách đặc tả này giúp đối chiếu thuận lợi giữa yêu cầu nghiệp vụ, thiết kế kỹ thuật, code triển khai và test case kiểm thử.
+
+Nhờ cấu trúc chặt chẽ và khả năng truy vết yêu cầu, mục 2.7.3 không chỉ đóng vai trò tài liệu mô tả, mà còn là nền tảng kiểm soát chất lượng toàn dự án, giảm sai lệch trong quá trình triển khai và hỗ trợ nghiệm thu hệ thống theo đúng phạm vi đã cam kết.
+
+
+### 2.7.4 Tổng hợp sơ đồ dự án (Diagrams)
+
+Để trực quan hóa toàn bộ hệ thống, bộ sơ đồ dự án được tổng hợp theo các nhóm sau:
+
+1. Sơ đồ kiến trúc tổng thể:
+   Mô tả mối liên kết Frontend - Backend - Database - Storage.
+
+2. Sơ đồ ERD:
+   Mô tả các thực thể chính User, Document, Folder, Permission, SharingRequest và quan hệ giữa chúng.
+
+3. Sơ đồ lớp (Class Diagram):
+   Mô tả các lớp Controller, Service, Repository, Entity và mối quan hệ phụ thuộc/chứa đựng.
+
+4. Sơ đồ Use Case:
+   Mô tả phạm vi chức năng của các actor Guest, User, Admin.
+
+5. Sơ đồ Sequence:
+   Mô tả trình tự xử lý của các luồng trọng tâm:
+   - Đăng nhập.
+   - Upload tài liệu.
+   - Chia sẻ tài liệu và duyệt yêu cầu.
+
+Bộ sơ đồ này đóng vai trò cầu nối giữa yêu cầu nghiệp vụ và thiết kế kỹ thuật, giúp nhóm phát triển và người đọc báo cáo hiểu rõ cấu trúc dữ liệu, phạm vi chức năng và hành vi runtime của hệ thống.
+
+#### Cách trình bày khi sơ đồ quá lớn
+
+Với các sơ đồ dọc dài hoặc có nhiều node/endpoint (như sơ đồ mapping actor - API), không nên ép vào một trang duy nhất vì sẽ làm chữ quá nhỏ và khó đọc. Cách trình bày khuyến nghị:
+
+1. Đặt bản đầy đủ ở phụ lục:
+  - Chèn bản gốc độ phân giải cao tại "Phụ lục A/B".
+  - Trong phần 2.7.4 chỉ giữ bản rút gọn hoặc ảnh preview.
+
+2. Chia sơ đồ thành các hình con theo nhóm chức năng:
+  - Hình 2.7a: Nhóm Authentication + Folder.
+  - Hình 2.7b: Nhóm Document + Permission + Sharing.
+  - Hình 2.7c: Nhóm Admin + System flow.
+
+3. Thêm chú thích và quy ước đọc hình:
+  - Nêu rõ màu, mũi tên, actor, chiều luồng dữ liệu.
+  - Ghi caption đầy đủ dưới mỗi hình (ví dụ: "Hình 2.7b. Luồng API cho quản lý tài liệu và chia sẻ").
+
+4. Dẫn chiếu chéo trong nội dung:
+  - Ở 2.7.4: "Chi tiết đầy đủ xem tại Phụ lục A, Hình A.1".
+  - Ở phụ lục: "Sơ đồ này là bản mở rộng của Hình 2.7 trong Chương 2".
+
+5. Nguyên tắc định dạng:
+  - Nếu sơ đồ quá cao: dùng trang riêng khổ ngang (landscape).
+  - Nếu sơ đồ quá dày: tăng lề dưới và đặt hình tràn chiều ngang.
+  - Ưu tiên xuất ảnh PNG/SVG nét cao, tránh ảnh mờ.
+
+Đoạn mẫu có thể chèn trực tiếp vào báo cáo:
+"Do sơ đồ tổng hợp endpoint và luồng phân quyền có kích thước lớn, nhóm trình bày bản rút gọn tại Mục 2.7.4 nhằm bảo đảm khả năng đọc trong thân báo cáo. Bản đầy đủ độ phân giải cao được chuyển sang Phụ lục A (Hình A.1-A.3), đồng thời tách theo từng nhóm chức năng Authentication, Document Sharing và Admin để thuận tiện đối chiếu với các yêu cầu FR/NFR đã nêu."
