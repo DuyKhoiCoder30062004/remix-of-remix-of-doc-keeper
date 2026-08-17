@@ -112,6 +112,10 @@ sequenceDiagram
 ```mermaid
 classDiagram
 
+    class JpaRepository~T, ID~ {
+        <<interface>>
+    }
+
     class AuthController {
         -AuthService authService
         -JwtService jwtService
@@ -119,25 +123,6 @@ classDiagram
         +login(request) ResponseEntity
         +getCurrentUser(authHeader) ResponseEntity
         +logout(authHeader) ResponseEntity
-    }
-
-    class AuthService {
-        -UserManagerRepository userRepository
-        -JwtService jwtService
-        -PasswordEncoder passwordEncoder
-        +register(request) AuthResponseDto
-        +login(request) AuthResponseDto
-        +getCurrentUser(token) UserManager
-        +logout(token) void
-    }
-
-    class JwtService {
-        -String jwtSecret
-        -long jwtExpirationMs
-        +generateToken(user) String
-        +extractUserId(token) Integer
-        +extractRole(token) String
-        +isTokenValid(token) boolean
     }
 
     class FolderManagerController {
@@ -151,14 +136,16 @@ classDiagram
         +deleteFolder(id, authorization) void
     }
 
-    class FolderManagerService {
-        -FolderManagerRepository folderManagerRepository
-        -UserManagerRepository userManagerRepository
-        +getAllFolders(currentUserId) List~FolderManager~
-        +getFolderById(id, currentUserId) FolderManager
-        +createFolder(folder, currentUserId) FolderManager
-        +updateFolder(id, updatedFolder, currentUserId) FolderManager
-        +deleteFolderById(id, currentUserId) void
+    class DocumentManageController {
+        -DocumentManageService documentManageService
+        -AuthService authService
+        -JwtService jwtService
+        +getDocuments(authorization, folderId, q) List~DocumentManage~
+        +getDocumentById(id, authorization) DocumentManage
+        +createDocument(file, folderId, title, authorization) DocumentManage
+        +updateDocument(id, updatedDocument, authorization) DocumentManage
+        +moveDocument(id, folderId, authorization) DocumentManage
+        +deleteDocument(id, authorization) void
     }
 
     class PermissionManagerController {
@@ -170,16 +157,14 @@ classDiagram
         +deletePermission(id) void
     }
 
-    class PermissionManagerService {
-        -PermissionManagerRepository permissionManagerRepository
-        -DocumentManageRepository documentManageRepository
-        -UserManagerRepository userManagerRepository
-        +getAllPermissions() List~PermissionManager~
-        +getPermissionsByDocumentId(docId) List~PermissionManager~
-        +getPermissionById(id) PermissionManager
-        +createPermission(docId, userId, accessType) PermissionManager
-        +updatePermission(id, accessType) PermissionManager
-        +deletePermissionById(id) void
+    class SharingRequestManagerController {
+        -SharingRequestManagerService sharingRequestManagerService
+        +getAllRequests(userId) List~SharingRequestManager~
+        +getRequestById(id) SharingRequestManager
+        +createRequest(request) SharingRequestManager
+        +approveRequest(id) SharingRequestManager
+        +rejectRequest(id) SharingRequestManager
+        +deleteRequest(id) void
     }
 
     class UserManagerController {
@@ -191,13 +176,24 @@ classDiagram
         +deleteUser(id) void
     }
 
-    class UserManagerService {
+    class AuthService {
+        -UserManagerRepository userRepository
+        -JwtService jwtService
+        -PasswordEncoder passwordEncoder
+        +register(request) AuthResponseDto
+        +login(request) AuthResponseDto
+        +getCurrentUser(token) UserManager
+        +logout(token) void
+    }
+
+    class FolderManagerService {
+        -FolderManagerRepository folderManagerRepository
         -UserManagerRepository userManagerRepository
-        +getAllUsers() List~UserManager~
-        +getUserById(id) UserManager
-        +createUser(user) UserManager
-        +updateUser(id, updatedUser) UserManager
-        +deleteUserById(id) void
+        +getAllFolders(currentUserId) List~FolderManager~
+        +getFolderById(id, currentUserId) FolderManager
+        +createFolder(folder, currentUserId) FolderManager
+        +updateFolder(id, updatedFolder, currentUserId) FolderManager
+        +deleteFolderById(id, currentUserId) void
     }
 
     class DocumentManageService {
@@ -214,6 +210,69 @@ classDiagram
         +deleteDocumentById(id, currentUserId) void
     }
 
+    class PermissionManagerService {
+        -PermissionManagerRepository permissionManagerRepository
+        -DocumentManageRepository documentManageRepository
+        -UserManagerRepository userManagerRepository
+        +getAllPermissions() List~PermissionManager~
+        +getPermissionsByDocumentId(docId) List~PermissionManager~
+        +getPermissionById(id) PermissionManager
+        +createPermission(docId, userId, accessType) PermissionManager
+        +updatePermission(id, accessType) PermissionManager
+        +deletePermissionById(id) void
+    }
+
+    class SharingRequestManagerService {
+        -SharingRequestManagerRepository sharingRequestManagerRepository
+        -DocumentManageRepository documentManageRepository
+        -UserManagerRepository userManagerRepository
+        -PermissionManagerRepository permissionManagerRepository
+        +getAllRequests(userId) List~SharingRequestManager~
+        +getRequestById(id) SharingRequestManager
+        +createRequest(docId, requesterId, permission) SharingRequestManager
+        +approveRequest(id) SharingRequestManager
+        +rejectRequest(id) SharingRequestManager
+        +deleteRequestById(id) void
+    }
+
+    class UserManagerService {
+        -UserManagerRepository userManagerRepository
+        +getAllUsers() List~UserManager~
+        +getUserById(id) UserManager
+        +createUser(user) UserManager
+        +updateUser(id, updatedUser) UserManager
+        +deleteUserById(id) void
+    }
+
+    class JwtService {
+        -String jwtSecret
+        -long jwtExpirationMs
+        +generateToken(user) String
+        +extractUserId(token) Integer
+        +extractRole(token) String
+        +isTokenValid(token) boolean
+    }
+
+    class UserManagerRepository {
+        <<interface>>
+    }
+
+    class FolderManagerRepository {
+        <<interface>>
+    }
+
+    class DocumentManageRepository {
+        <<interface>>
+    }
+
+    class PermissionManagerRepository {
+        <<interface>>
+    }
+
+    class SharingRequestManagerRepository {
+        <<interface>>
+    }
+
     class UserManager {
         +Integer userId
         +String name
@@ -226,29 +285,37 @@ classDiagram
     class FolderManager {
         +Integer folderId
         +String name
+        +Integer ownerId
         +LocalDateTime createdAt
     }
 
     class DocumentManage {
         +Integer docId
         +String title
+        +Integer ownerId
+        +String metadata
         +LocalDateTime createdAt
         +LocalDateTime updatedAt
+        +Integer folderId
+        +byte[] fileData
         +String originalFilename
         +String contentType
     }
 
     class PermissionManager {
         +Integer permId
+        +Integer docId
+        +Integer userId
         +String accessType
     }
 
     class SharingRequestManager {
-        +Integer sharingReqId
-        +String accessType
+        +Integer requestId
+        +Integer docId
+        +Integer requesterId
         +String status
-        +LocalDateTime createdAt
-        +LocalDateTime updatedAt
+        +LocalDateTime requestedAt
+        +String permission
     }
 
     AuthController --> AuthService
@@ -258,22 +325,55 @@ classDiagram
     FolderManagerController --> AuthService
     FolderManagerController --> JwtService
 
-    PermissionManagerController --> PermissionManagerService
+    DocumentManageController --> DocumentManageService
+    DocumentManageController --> AuthService
+    DocumentManageController --> JwtService
 
+    PermissionManagerController --> PermissionManagerService
+    SharingRequestManagerController --> SharingRequestManagerService
     UserManagerController --> UserManagerService
 
-    AuthService --> UserManager
+    AuthService --> UserManagerRepository
     AuthService --> JwtService
 
+    FolderManagerService --> FolderManagerRepository
+    FolderManagerService --> UserManagerRepository
+
+    DocumentManageService --> DocumentManageRepository
+    DocumentManageService --> FolderManagerRepository
+    DocumentManageService --> UserManagerRepository
+    DocumentManageService --> PermissionManagerRepository
+
+    PermissionManagerService --> PermissionManagerRepository
+    PermissionManagerService --> DocumentManageRepository
+    PermissionManagerService --> UserManagerRepository
+
+    SharingRequestManagerService --> SharingRequestManagerRepository
+    SharingRequestManagerService --> DocumentManageRepository
+    SharingRequestManagerService --> UserManagerRepository
+    SharingRequestManagerService --> PermissionManagerRepository
+
+    UserManagerService --> UserManagerRepository
+
+    UserManagerRepository ..|> JpaRepository~UserManager, Integer~
+    FolderManagerRepository ..|> JpaRepository~FolderManager, Integer~
+    DocumentManageRepository ..|> JpaRepository~DocumentManage, Integer~
+    PermissionManagerRepository ..|> JpaRepository~PermissionManager, Integer~
+    SharingRequestManagerRepository ..|> JpaRepository~SharingRequestManager, Integer~
+
+    AuthService --> UserManager
     FolderManagerService --> FolderManager
     FolderManagerService --> UserManager
-
+    DocumentManageService --> DocumentManage
+    DocumentManageService --> FolderManager
+    DocumentManageService --> UserManager
     PermissionManagerService --> PermissionManager
     PermissionManagerService --> DocumentManage
     PermissionManagerService --> UserManager
-
+    SharingRequestManagerService --> SharingRequestManager
+    SharingRequestManagerService --> DocumentManage
+    SharingRequestManagerService --> UserManager
     UserManagerService --> UserManager
-    DocumentManageService --> DocumentManage
 
     UserManager "1" --> "0..*" DocumentManage
     UserManager "1" --> "0..*" FolderManager
