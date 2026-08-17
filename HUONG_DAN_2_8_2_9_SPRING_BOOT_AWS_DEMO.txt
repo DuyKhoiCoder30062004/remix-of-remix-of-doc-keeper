@@ -198,10 +198,33 @@ B. Nhóm endpoint điển hình
 - GET /api/v1/users/audit/export
 
 C. Chuẩn response API
-- Thành công:
-  code, message, data, timestamp.
-- Thất bại:
-  code, message, error_details, timestamp, path.
+- Hệ thống nên dùng một cấu trúc phản hồi thống nhất cho tất cả endpoint để frontend dễ xử lý và dễ kiểm thử.
+- Response thành công thường có các trường:
+  - code: mã trạng thái hoặc mã nghiệp vụ.
+  - message: thông báo ngắn gọn cho người dùng.
+  - data: dữ liệu trả về của request.
+  - timestamp: thời điểm phản hồi.
+- Response thất bại thường có các trường:
+  - code: mã lỗi.
+  - message: mô tả lỗi ngắn gọn.
+  - error_details: thông tin chi tiết để debug.
+  - timestamp: thời điểm lỗi xảy ra.
+  - path: đường dẫn endpoint bị lỗi.
+- Ví dụ response thành công:
+  {
+    "code": 200,
+    "message": "Success",
+    "data": {...},
+    "timestamp": "2026-08-14T10:30:00"
+  }
+- Ví dụ response thất bại:
+  {
+    "code": 403,
+    "message": "Forbidden",
+    "error_details": "User does not have permission to update this document.",
+    "timestamp": "2026-08-14T10:30:00",
+    "path": "/api/v1/documents/12"
+  }
 
 D. Tài liệu hóa API
 - Dùng Swagger/OpenAPI để:
@@ -222,47 +245,258 @@ Mục tiêu:
 A. Chuẩn bị môi trường Postman
 - Tạo Environment: local, staging, production.
 - Biến môi trường cơ bản:
-  base_url, access_token, test_user_id, test_document_id.
+  base_url, access_token_user_a, access_token_user_b, access_token_admin, test_user_id, test_folder_id, test_document_id, test_request_id.
+
+A1. Quy ước test chung
+- Header chuẩn cho API bảo vệ:
+  Authorization: Bearer {{access_token_user_a}} (hoặc user_b/admin).
+- Content-Type:
+  - application/json cho request JSON.
+  - multipart/form-data cho upload tài liệu.
+- Thứ tự chạy khuyến nghị: Auth -> Folder -> Document -> Sharing/Permission -> Admin.
+- Mỗi request đều kiểm tra tối thiểu:
+  - Status code.
+  - Cấu trúc response (code, message, data hoặc error_details).
+  - Giá trị nghiệp vụ quan trọng trong data.
+
+A2. Dữ liệu test đề xuất
+- User A (role User): người sở hữu tài liệu.
+- User B (role User): người nhận chia sẻ.
+- Admin (role Admin): kiểm thử endpoint quản trị.
+- 01 file mẫu để upload (PDF hoặc DOCX).
 
 B. Quy trình test khuyến nghị
 
-Bước 1: Test Auth
-- Register user mới.
-- Login lấy token.
-- Lưu token vào biến access_token.
-- Gọi /auth/me xác minh token hợp lệ.
+B1. Nhóm Authentication
 
-Bước 2: Test Folder CRUD
-- Tạo folder.
-- Lấy danh sách folder.
-- Đổi tên folder.
-- Xóa folder.
+1) POST /api/v1/auth/register
+- Mục đích: đăng ký tài khoản mới.
+- Body mẫu:
+  {
+    "name": "Test User A",
+    "email": "usera_test@example.com",
+    "password": "Abc@123456"
+  }
+- Kỳ vọng:
+  - 200/201 khi đăng ký thành công.
+  - 409 khi email đã tồn tại.
+  - 400 khi thiếu trường bắt buộc.
 
-Bước 3: Test Document CRUD
-- Upload file.
-- Xem list.
-- Xem chi tiết.
-- Update metadata.
-- Move document.
-- Delete document.
+2) POST /api/v1/auth/login
+- Mục đích: đăng nhập lấy JWT.
+- Body mẫu:
+  {
+    "email": "usera_test@example.com",
+    "password": "Abc@123456"
+  }
+- Kỳ vọng:
+  - 200 khi thành công.
+  - Response chứa token.
+  - Lưu token vào biến {{access_token_user_a}} bằng script Postman.
+  - 401 khi sai mật khẩu.
 
-Bước 4: Test Sharing flow
-- User A gửi sharing request cho User B.
-- User B approve/reject.
-- Kiểm tra Permission đã cập nhật chưa.
+3) GET /api/v1/auth/me
+- Mục đích: xác minh token hợp lệ.
+- Header: Authorization: Bearer {{access_token_user_a}}.
+- Kỳ vọng:
+  - 200 và trả về đúng email/role của user đăng nhập.
+  - 401 khi thiếu hoặc sai token.
 
-Bước 5: Test quyền truy cập
-- User không quyền gọi update/delete document phải trả 403.
-- Thiếu token phải trả 401.
+4) POST /api/v1/auth/logout
+- Mục đích: kết thúc phiên đăng nhập.
+- Kỳ vọng:
+  - 200 khi logout thành công.
+  - 401 nếu token không hợp lệ.
+
+B2. Nhóm Folder
+
+1) POST /api/v1/folders
+- Mục đích: tạo thư mục mới.
+- Body mẫu:
+  {
+    "name": "Folder API Test"
+  }
+- Kỳ vọng:
+  - 200/201 khi tạo thành công.
+  - Lưu folder_id vào {{test_folder_id}}.
+  - 400 khi name rỗng.
+
+2) GET /api/v1/folders
+- Mục đích: lấy danh sách thư mục của user.
+- Kỳ vọng:
+  - 200 và có thư mục vừa tạo.
+  - Không trả thư mục của user khác nếu không có quyền.
+
+3) PATCH /api/v1/folders/:id
+- Mục đích: đổi tên thư mục.
+- Kỳ vọng:
+  - 200 khi đổi tên thành công.
+  - 404 khi folder_id không tồn tại.
+  - 403 khi user không sở hữu thư mục.
+
+4) DELETE /api/v1/folders/:id
+- Mục đích: xóa thư mục.
+- Kỳ vọng:
+  - 200/204 khi xóa thành công.
+  - 404 nếu không tồn tại.
+  - 403 nếu không có quyền.
+
+B3. Nhóm Document
+
+1) POST /api/v1/documents/upload
+- Mục đích: upload tài liệu mới.
+- Form-data mẫu:
+  - file: chọn tệp mẫu.
+  - title: "Tai lieu test API".
+  - folder_id: {{test_folder_id}} (nếu có).
+- Kỳ vọng:
+  - 200/201 khi upload thành công.
+  - Response trả doc_id, lưu vào {{test_document_id}}.
+  - 400 khi thiếu file.
+
+2) GET /api/v1/documents
+- Mục đích: lấy danh sách tài liệu.
+- Kỳ vọng:
+  - 200 và có tài liệu vừa upload.
+  - Hỗ trợ lọc/phân trang nếu API có.
+
+3) GET /api/v1/documents/:id
+- Mục đích: xem chi tiết tài liệu.
+- Kỳ vọng:
+  - 200 khi có quyền truy cập.
+  - 403 khi user không có quyền.
+  - 404 khi doc_id không tồn tại.
+
+4) PATCH /api/v1/documents/:id
+- Mục đích: cập nhật metadata hoặc title.
+- Body mẫu:
+  {
+    "title": "Tai lieu test API - updated",
+    "metadata": {
+      "category": "report",
+      "tag": ["api", "postman"]
+    }
+  }
+- Kỳ vọng:
+  - 200 khi cập nhật thành công.
+  - 403 nếu không đủ quyền (Viewer không được sửa).
+
+5) POST /api/v1/documents/:id/move
+- Mục đích: di chuyển tài liệu sang thư mục khác.
+- Body mẫu:
+  {
+    "folder_id": 123
+  }
+- Kỳ vọng:
+  - 200 khi move thành công.
+  - 404 khi folder đích không tồn tại.
+  - 403 nếu không đủ quyền.
+
+6) DELETE /api/v1/documents/:id
+- Mục đích: xóa tài liệu.
+- Kỳ vọng:
+  - 200/204 khi xóa thành công.
+  - 403 khi không có quyền xóa.
+  - 404 khi tài liệu không tồn tại.
+
+B4. Nhóm Permission và Sharing
+
+1) GET /api/v1/permissions
+- Mục đích: kiểm tra danh sách quyền đã cấp.
+- Kỳ vọng:
+  - 200 và có bản ghi quyền liên quan tới {{test_document_id}} sau khi approve request.
+
+2) POST /api/v1/sharing-requests
+- Mục đích: User A gửi yêu cầu chia sẻ.
+- Body mẫu (điều chỉnh theo payload thật của backend):
+  {
+    "doc_id": {{test_document_id}},
+    "permission": "Viewer"
+  }
+- Kỳ vọng:
+  - 200/201 khi tạo request thành công.
+  - Lưu request_id vào {{test_request_id}}.
+  - 400 khi thiếu trường bắt buộc.
+
+3) GET /api/v1/sharing-requests
+- Mục đích: xem danh sách yêu cầu chia sẻ.
+- Kỳ vọng:
+  - 200.
+  - User A thấy request đã gửi; user xử lý thấy request liên quan theo nghiệp vụ hệ thống.
+
+4) POST /api/v1/sharing-requests/:id/approve
+- Mục đích: duyệt yêu cầu chia sẻ.
+- Kỳ vọng:
+  - 200 khi duyệt thành công.
+  - Status request chuyển sang Approved.
+  - Kiểm tra tiếp GET /api/v1/permissions thấy quyền mới được cấp.
+
+5) POST /api/v1/sharing-requests/:id/reject
+- Mục đích: từ chối yêu cầu chia sẻ.
+- Kỳ vọng:
+  - 200 khi từ chối thành công.
+  - Status request chuyển sang Rejected.
+  - Không phát sinh quyền mới trong permissions.
+
+B5. Nhóm Admin
+
+1) GET /api/v1/users
+- Mục đích: lấy danh sách người dùng (chỉ Admin).
+- Kỳ vọng:
+  - 200 với token admin.
+  - 403 với token user thường.
+
+2) PATCH /api/v1/users/:id/role
+- Mục đích: cập nhật vai trò người dùng.
+- Body mẫu:
+  {
+    "role": "Admin"
+  }
+- Kỳ vọng:
+  - 200 khi admin cập nhật thành công.
+  - 400 khi role không hợp lệ.
+  - 403 khi user thường gọi endpoint này.
+
+3) GET /api/v1/users/audit/export
+- Mục đích: xuất log/audit.
+- Kỳ vọng:
+  - 200 với admin.
+  - Content-Type phù hợp (JSON/CSV/file theo thiết kế).
+  - 403 với user thường.
+
+B6. Ma trận kiểm thử lỗi bắt buộc (negative tests)
+- 401 Unauthorized:
+  - Gọi endpoint bảo vệ mà không gửi Authorization header.
+  - Gửi token sai định dạng hoặc token hết hạn.
+- 403 Forbidden:
+  - User B cố sửa/xóa tài liệu của User A khi chưa được cấp quyền.
+  - User thường gọi endpoint Admin.
+- 404 Not Found:
+  - Dùng id không tồn tại cho folder/document/request.
+- 409 Conflict:
+  - Đăng ký email đã tồn tại.
+- 400 Bad Request:
+  - Thiếu field bắt buộc hoặc sai kiểu dữ liệu request body.
 
 C. Viết test script trong Postman
-- Kiểm tra status code.
-- Kiểm tra response body field bắt buộc.
-- Lưu id trả về cho request tiếp theo.
+- Kiểm tra status code bằng pm.response.to.have.status(...).
+- Kiểm tra field bắt buộc trong JSON response:
+  - pm.expect(json).to.have.property('code');
+  - pm.expect(json).to.have.property('message');
+- Lưu biến cho request sau:
+  - postman.setEnvironmentVariable('access_token_user_a', json.data.token);
+  - postman.setEnvironmentVariable('test_document_id', json.data.doc_id);
+- Với flow cần đổi user, tách rõ 3 collection/folder test:
+  - User A Flow.
+  - User B Flow.
+  - Admin Flow.
 
 D. Báo cáo kết quả test
 - Bảng tổng hợp:
-  endpoint, expected, actual, pass/fail, ghi chú lỗi.
+  endpoint, method, test case, expected status, actual status, pass/fail, ghi chú lỗi.
+- Tỷ lệ pass khuyến nghị cần theo dõi:
+  - Smoke test: 100% pass.
+  - Regression test: >= 95% pass trước khi demo/release.
 
 E. Đoạn viết mẫu cho báo cáo
 "Kiểm thử API được thực hiện bằng Postman theo chuỗi nghiệp vụ hoàn chỉnh từ xác thực, quản lý thư mục/tài liệu đến chia sẻ và phân quyền. Kết quả kiểm thử xác nhận các endpoint chính hoạt động đúng chức năng, đồng thời bảo đảm các kiểm tra bảo mật và xử lý lỗi theo thiết kế."
@@ -542,13 +776,17 @@ Tất cả API phản hồi theo một cấu trúc thống nhất, bao gồm mã
 
 ### 2.8.4 Kiểm thử API bằng Postman
 
-Kiểm thử API được thực hiện bằng Postman theo chuỗi nghiệp vụ hoàn chỉnh để bảo đảm các endpoint hoạt động đúng thiết kế. Nhóm tạo các environment như local, staging và production để dễ chuyển đổi cấu hình giữa các môi trường.
+Kiểm thử API được thực hiện bằng Postman theo hướng end-to-end, bao phủ toàn bộ nhóm endpoint Authentication, Folder, Document, Permission/Sharing và Admin. Mỗi test case đều kiểm tra đồng thời ba lớp: tính đúng nghiệp vụ, tính đúng phân quyền và tính đúng cấu trúc response.
 
-Quy trình test thường bắt đầu bằng xác thực: đăng ký tài khoản, đăng nhập để lấy token, sau đó gọi /auth/me để xác minh token hợp lệ. Tiếp theo, nhóm kiểm thử các API thư mục và tài liệu như tạo thư mục, upload tài liệu, xem danh sách, xem chi tiết, cập nhật, di chuyển và xóa. Sau đó, nhóm kiểm thử luồng chia sẻ bằng cách gửi yêu cầu chia sẻ từ một người dùng sang người dùng khác, duyệt hoặc từ chối yêu cầu và kiểm tra quyền truy cập được cập nhật chính xác hay không.
+Nhóm tạo 3 token riêng cho User A, User B và Admin để mô phỏng đúng luồng nghiệp vụ thật. Các biến môi trường bắt buộc gồm base_url, access_token_user_a, access_token_user_b, access_token_admin, test_folder_id, test_document_id và test_request_id. Thứ tự chạy test được chuẩn hóa theo chuỗi: Auth -> Folder -> Document -> Sharing/Permission -> Admin -> Negative tests.
 
-Trong Postman, nhóm sử dụng các biến môi trường như base_url, access_token, test_user_id và test_document_id để tái sử dụng trong các request liên tiếp. Ngoài status code, nhóm còn kiểm tra nội dung response, kiểm tra các trường bắt buộc, và xác nhận các trường hợp lỗi như 401 khi thiếu token hoặc 403 khi không đủ quyền.
+Với Authentication, nhóm kiểm thử register, login, me và logout; trọng tâm là xác minh token hợp lệ, phát hiện sai mật khẩu, và bắt lỗi trùng email. Với Folder và Document, nhóm kiểm thử đầy đủ CRUD, bao gồm tạo dữ liệu mới, đọc danh sách, cập nhật thông tin, di chuyển tài liệu và xóa dữ liệu; đồng thời xác nhận lỗi 403 khi user không có quyền chỉnh sửa tài nguyên không thuộc sở hữu.
 
-Kết quả kiểm thử được tổng hợp thành bảng gồm endpoint, method, kết quả mong đợi, kết quả thực tế và ghi chú lỗi nếu có. Cách kiểm thử này giúp phát hiện sớm lỗi logic nghiệp vụ, lỗi phân quyền và lỗi tích hợp giữa frontend và backend.
+Với Sharing/Permission, nhóm kiểm thử tạo yêu cầu chia sẻ, duyệt/từ chối yêu cầu và đối chiếu thay đổi trên bảng quyền. Sau thao tác approve, danh sách permission phải xuất hiện bản ghi quyền mới; sau thao tác reject, không được phát sinh quyền truy cập ngoài dự kiến. Nhóm Admin được kiểm thử riêng bằng token admin để xác nhận endpoint quản trị chỉ cho phép vai trò phù hợp.
+
+Ngoài luồng nghiệp vụ chính, nhóm triển khai bộ negative tests bắt buộc cho 401, 403, 404, 409 và 400. Các trường hợp điển hình gồm thiếu token, token sai/hết hạn, truy cập trái quyền, id không tồn tại, trùng email và payload thiếu trường bắt buộc. Các test script Postman được dùng để assert status code, assert field response và lưu động các id/token cho request kế tiếp.
+
+Kết quả kiểm thử được tổng hợp theo bảng endpoint, method, test case, expected status, actual status, pass/fail và ghi chú lỗi. Cách tổ chức này giúp truy vết lỗi nhanh, giảm rủi ro hồi quy và bảo đảm hệ thống sẵn sàng cho giai đoạn demo trên môi trường AWS.
 
 
 ## 2.9. HOÀN THÀNH VÀ DEMO DỰ ÁN
